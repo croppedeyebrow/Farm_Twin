@@ -1,3 +1,8 @@
+/* 1단계 관제 셸 레이아웃.
+ * viewport: 풀스크린 3D
+ * overlay : 브랜드 + health 상태 (3D 위를 가리지 않도록 좌상단 좁은 패널)
+ */
+
 .shell {
   position: relative;
   min-height: 100vh;
@@ -16,6 +21,7 @@
   margin: 1.25rem;
   padding: 1.25rem 1.35rem;
   color: #13241c;
+  /* 반투명 패널 — 뒤 3D가 비치도록 */
   background: color-mix(in srgb, #f3f7f4 88%, transparent);
   border: 1px solid color-mix(in srgb, #0f3d2e 18%, transparent);
   backdrop-filter: blur(8px);

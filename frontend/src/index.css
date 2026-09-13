@@ -1,3 +1,5 @@
+/* 전역 베이스 — 3D 캔버스 배경색(#d7e4db)과 맞춤 */
+
 :root {
   color: #1a1f1c;
   background: #d7e4db;
@@ -24,5 +26,6 @@ body,
 
 body {
   min-width: 320px;
+  /* 관제 화면은 뷰포트 고정. 스크롤은 오버레이 내부에서만 필요 시 허용 */
   overflow: hidden;
 }

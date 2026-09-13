@@ -1,3 +1,15 @@
+# =============================================================================
+# FarmTwin CI (1단계 Day 3)
+# -----------------------------------------------------------------------------
+# PR / main push 시:
+#   1) backend  lint + test
+#   2) frontend lint + build
+#   3) (둘 다 성공 시) Docker 이미지 빌드 검증
+#
+# 인프라 설계의 "Pull Request: Python lint/type/test, TS lint/build, Docker build"
+# 를 MVP 범위로 구현한 것이다. 배포 잡스는 8단계에서 추가한다.
+# =============================================================================
+
 name: CI
 
 on:
@@ -13,6 +25,8 @@ jobs:
       run:
         working-directory: backend
     env:
+      # Settings 가 import 시 DATABASE_URL 을 요구한다.
+      # readiness 테스트는 engine 을 mock 하므로 실제 DB는 필요 없다.
       DATABASE_URL: postgresql+asyncpg://farmtwin:farmtwin@127.0.0.1:5432/farmtwin
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +34,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          # README / .python-version 과 동일한 3.12 고정
           python-version: "3.12"
 
       - name: Install dependencies
@@ -43,6 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
+          # README / .nvmrc 과 동일한 22 고정
           node-version: "22"
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
@@ -59,6 +75,7 @@ jobs:
   docker:
     name: Docker build
     runs-on: ubuntu-latest
+    # 단위 검증이 깨진 이미지 빌드를 돌리지 않도록 선행 잡 성공을 요구
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
