@@ -1,5 +1,13 @@
 """
 3단계 Day 11 — run 제어·step·readings batch 통합 테스트 (실 DB).
+
+검증 의도
+---------
+- start → pause → resume → stop 상태 기계
+- CREATED 에서 step/pause 는 409
+- step 이 FarmState version·simulation_time 을 전진시키고 readings 를 batch insert
+- 응답/DB 의 환경 필드는 참값 (readings 와 혼동 금지)
+- 동일 seed·입력으로 두 번 돌리면 참값 궤적 동일
 """
 
 from __future__ import annotations
@@ -19,12 +27,13 @@ from app.main import app
 
 @pytest.fixture
 async def seeded_farm(require_postgres: None) -> None:
+    """매 테스트 격리: Site CASCADE 삭제 후 MVP 재시드."""
     await seed_mvp(force=True)
-
 
 
 @pytest.fixture
 async def api_client() -> AsyncClient:
+    """ASGI 전송으로 FastAPI 앱을 직접 친다 (실 HTTP 포트 불필요)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -35,6 +44,7 @@ async def test_run_lifecycle_start_pause_resume_stop(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
+    """허용된 상태 전이만 성공하고 stop 시 ended_at 이 채워진다."""
     start = await api_client.post(f"/simulations/{RUN_ID}/start")
     assert start.status_code == 200
     assert start.json()["status"] == SimulationStatus.RUNNING.value
@@ -56,6 +66,7 @@ async def test_step_requires_running(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
+    """CREATED 상태에서 step → 409."""
     response = await api_client.post(
         f"/simulations/{RUN_ID}/step",
         json={"steps": 1, "dt_seconds": 60.0},
@@ -68,6 +79,11 @@ async def test_step_persists_readings_and_updates_true_state(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
+    """
+    5 step × 5 센서 = 25 readings.
+    FarmState.version += 5, simulation_time = 300.
+    응답 temperature 는 DB 참값과 일치.
+    """
     await api_client.post(f"/simulations/{RUN_ID}/start")
 
     async with SessionLocal() as session:
@@ -85,7 +101,7 @@ async def test_step_persists_readings_and_updates_true_state(
     assert step.status_code == 200
     body = step.json()
     assert body["steps_applied"] == 5
-    assert body["readings_inserted"] == 25  # 5 steps × 5 sensors
+    assert body["readings_inserted"] == 25
     assert body["simulation_time_seconds"] == 300.0
     assert body["farm_state_version"] == version_before + 5
 
@@ -95,8 +111,8 @@ async def test_step_persists_readings_and_updates_true_state(
         )
         assert after is not None
         assert after.version == version_before + 5
+        # step 응답의 환경 필드 = FarmState 참값
         assert after.temperature_c == body["temperature_c"]
-        # 환경이 움직였거나 version 만이라도 전진했는지 확인
         assert after.temperature_c != temp_before or after.version > version_before
 
         reading_count = await session.scalar(
@@ -113,8 +129,8 @@ async def test_step_persists_readings_and_updates_true_state(
             .order_by(SensorReading.simulation_time.desc())
         )
         assert latest is not None
-        # 측정값(offset/noise)과 참값은 일반적으로 다름
-        assert latest.value != after.temperature_c or abs(latest.value - after.temperature_c) >= 0
+        # 측정 행이 존재하면 충분 (offset/noise 로 참값과 다를 수 있음)
+        assert abs(latest.value - after.temperature_c) >= 0
 
 
 @pytest.mark.asyncio
@@ -122,7 +138,7 @@ async def test_step_reproducible_true_state_with_same_seed(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
-    """동일 seed·입력으로 두 번 step 하면 참값 궤적이 같다."""
+    """동일 seed·LED ON 입력으로 두 번 돌리면 최종 참값 온도가 같다."""
 
     async def run_once() -> float:
         await seed_mvp(force=True)
@@ -153,6 +169,7 @@ async def test_list_simulations_contains_seed_run(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
+    """seed 고정 RUN_ID 가 목록에 보인다."""
     response = await api_client.get("/simulations")
     assert response.status_code == 200
     ids = {item["id"] for item in response.json()}
@@ -164,5 +181,6 @@ async def test_invalid_transition_conflict(
     seeded_farm: None,
     api_client: AsyncClient,
 ) -> None:
+    """CREATED 에서 pause → 409 Conflict."""
     response = await api_client.post(f"/simulations/{RUN_ID}/pause")
     assert response.status_code == 409

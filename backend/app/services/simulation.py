@@ -1,13 +1,41 @@
 """
 시뮬레이션 run 제어·스텝·readings batch (3단계 Day 11).
 
-책임
-----
-- start / pause / resume / stop 상태 전이
-- 한 스텝: 외기 → 환경 참값 → FarmState 갱신 → (선택) 센서 측정 batch
-- 센서 noise 는 FarmState 에 절대 넣지 않는다
+=============================================================================
+책임 분리
+-----------------------------------------------------------------------------
+routers/simulations.py  → HTTP 경계
+이 모듈 (services)      → 상태 전이·폐쇄 루프 일부·DB 커밋
+domain/simulation/*     → 순수 계산 (시계·외기·환경·센서)
 
-폐쇄 루프 중 Day 11 범위: 1~4 (+ commit). 규칙/명령은 4단계.
+센서 noise 는 FarmState 에 절대 넣지 않는다.
+참값 갱신(_apply_environment_to_farm_state) 과 측정(persist_readings_batch) 을
+코드 경로상으로도 분리한다.
+
+=============================================================================
+상태 기계 (SimulationStatus)
+-----------------------------------------------------------------------------
+    CREATED ──start──► RUNNING ◄──resume── PAUSED
+                 │         │                  ▲
+                 │       pause                │
+                 │         └──────────────────┘
+                 │         │
+                 │        stop
+                 ▼         ▼
+              STOPPED ◄────┘
+
+잘못된 전이는 409 Conflict.
+step 은 RUNNING 에서만 허용 (pause = 가상 시계 정지와 동일 효과).
+
+=============================================================================
+폐쇄 루프에서 Day 11 범위
+-----------------------------------------------------------------------------
+백엔드 설계 6절 순서 중:
+  1 외기·FarmState 로드
+  2 액추에이터 상태 반영
+  3 다음 FarmState 계산
+  4 가상 센서 측정 + commit
+규칙/명령/이벤트(5~9)는 4단계.
 """
 
 from __future__ import annotations
@@ -37,6 +65,7 @@ from app.domain.simulation.state import (
 from app.domain.simulation.weather import create_weather_adapter
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
 
+# 허용 전이 집합 — 문서의 상태 기계와 1:1
 _ALLOWED_START = {
     SimulationStatus.CREATED,
     SimulationStatus.PAUSED,
@@ -49,6 +78,7 @@ _ALLOWED_STEP = {SimulationStatus.RUNNING}
 
 
 def _to_out(run: SimulationRun) -> SimulationRunOut:
+    """ORM → API 스키마."""
     return SimulationRunOut.model_validate(run)
 
 
@@ -56,6 +86,7 @@ async def get_run_or_404(
     session: AsyncSession,
     run_id: uuid.UUID,
 ) -> SimulationRun:
+    """없으면 404. 서비스 내부 공통 가드."""
     run = await session.get(SimulationRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="simulation run not found")
@@ -63,6 +94,7 @@ async def get_run_or_404(
 
 
 async def list_runs(session: AsyncSession) -> list[SimulationRunOut]:
+    """최신 생성순 run 목록."""
     result = await session.scalars(
         select(SimulationRun).order_by(SimulationRun.created_at.desc())
     )
@@ -70,11 +102,17 @@ async def list_runs(session: AsyncSession) -> list[SimulationRunOut]:
 
 
 async def get_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
+    """단건 조회."""
     return _to_out(await get_run_or_404(session, run_id))
 
 
 async def start_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
-    """CREATED/PAUSED/STOPPED → RUNNING."""
+    """
+    CREATED / PAUSED / STOPPED → RUNNING.
+
+    - 최초 start 때만 started_at 기록 (재시작 시 최초 시각 보존)
+    - ended_at 은 비워 다시 달릴 수 있게 한다
+    """
     run = await get_run_or_404(session, run_id)
     if run.status not in _ALLOWED_START:
         raise HTTPException(
@@ -92,7 +130,12 @@ async def start_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOu
 
 
 async def pause_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
-    """RUNNING → PAUSED. 가상 시계는 step 호출을 막아서 정지."""
+    """
+    RUNNING → PAUSED.
+
+    가상 시계를 멈추는 방법은 step 을 거부하는 것.
+    (SimulationClock.pause 와 같은 의미, DB 상태 플래그로 표현)
+    """
     run = await get_run_or_404(session, run_id)
     if run.status not in _ALLOWED_PAUSE:
         raise HTTPException(
@@ -106,7 +149,7 @@ async def pause_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOu
 
 
 async def resume_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
-    """PAUSED → RUNNING."""
+    """PAUSED → RUNNING. 마지막 committed FarmState / simulation_time 부터 이어간다."""
     run = await get_run_or_404(session, run_id)
     if run.status not in _ALLOWED_RESUME:
         raise HTTPException(
@@ -120,7 +163,7 @@ async def resume_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunO
 
 
 async def stop_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
-    """RUNNING/PAUSED → STOPPED."""
+    """RUNNING / PAUSED → STOPPED. ended_at = wall-clock 종료 시각."""
     run = await get_run_or_404(session, run_id)
     if run.status not in _ALLOWED_STOP:
         raise HTTPException(
@@ -135,6 +178,7 @@ async def stop_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut
 
 
 def _environment_from_farm_state(state: FarmState) -> EnvironmentState:
+    """DB 참값 스냅샷 → 도메인 EnvironmentState (ORM 의존을 step 밖으로)."""
     return EnvironmentState(
         temperature_c=state.temperature_c,
         humidity_pct=state.humidity_pct,
@@ -151,7 +195,12 @@ def _apply_environment_to_farm_state(
     *,
     run_id: uuid.UUID,
 ) -> None:
-    """참값만 기록. 센서 noise 절대 금지."""
+    """
+    환경 모델 출력(참값)만 FarmState 에 기록한다.
+
+    센서 sample.value 를 여기 넣으면 불변조건 위반.
+    version 은 갱신마다 +1 (낙관적 동시성·관측용).
+    """
     farm_state.temperature_c = env.temperature_c
     farm_state.humidity_pct = env.humidity_pct
     farm_state.co2_ppm = env.co2_ppm
@@ -166,6 +215,12 @@ async def _load_actuator_inputs(
     session: AsyncSession,
     room_id: uuid.UUID,
 ) -> ActuatorInputs:
+    """
+    ORM Actuator 현재 운전 캐시 → 상태전이 입력 벡터.
+
+    OFF 이면 effective 0.
+    동일 타입 여러 대는 max (Day 9 ActuatorInputs.from_commands 와 동일 정책).
+    """
     actuators = (
         await session.scalars(select(Actuator).where(Actuator.room_id == room_id))
     ).all()
@@ -195,6 +250,12 @@ async def _next_reading_sequence(
     session: AsyncSession,
     run_id: uuid.UUID,
 ) -> int:
+    """
+    run 내 sequence 다음 값.
+
+    UNIQUE(simulation_run_id, sequence) 를 지키려면
+    max(sequence)+1 부터 batch 를 채워야 한다. 행이 없으면 0.
+    """
     current = await session.scalar(
         select(func.coalesce(func.max(SensorReading.sequence), -1)).where(
             SensorReading.simulation_run_id == run_id
@@ -216,7 +277,9 @@ async def persist_readings_batch(
     """
     SensorSample 목록을 sensor_readings 에 append-only batch insert.
 
-    sequence 는 run 내에서 단조 증가 (UNIQUE(run_id, sequence)).
+    - 원본 수정 금지 (UPDATE 없음)
+    - 룸에 해당 sensor_type 메타가 없으면 그 샘플은 skip
+    - sampled_at / ingested_at: 시간_컬럼_의미.md (원본 샘플 vs 적재 시각)
     """
     sequence = sequence_start
     inserted = 0
@@ -257,11 +320,19 @@ async def step_run(
     """
     RUNNING run 을 N 스텝 전진한다.
 
-    각 스텝:
-      1) weather.read(t)
-      2) step_environment → 참값
-      3) FarmState 갱신 (noise 없음)
-      4) VirtualSensorBank.measure → readings batch (옵션)
+    각 스텝
+    -------
+    1) weather.read(t+dt) — 외기 경계조건
+    2) step_environment — 참값 오일러 적분
+    3) FarmState / run.simulation_time_seconds 갱신 (noise 없음)
+    4) (옵션) VirtualSensorBank.measure → readings batch
+
+    재시작 복구
+    -----------
+    env.simulation_time 은 run.simulation_time_seconds 로 맞춘다.
+    (FarmState.simulation_time 과 어긋날 수 있는 과거 버그/부분 커밋 대비)
+
+    worker(simulator/app/runner.py) 와 API POST .../step 가 이 함수를 공유한다.
     """
     if steps < 1:
         raise HTTPException(status_code=400, detail="steps must be >= 1")
@@ -286,13 +357,14 @@ async def step_run(
     ).all()
     sensors_by_type = {sensor.sensor_type: sensor for sensor in sensors}
 
+    # 계수·외기·센서·설비는 스텝 루프 밖에서 한 번만 준비 (동일 입력 재현)
     params = load_environment_params()
     weather = create_weather_adapter(run.weather_mode.value, seed=run.random_seed)
     sensor_bank = VirtualSensorBank(seed=run.random_seed)
     actuators = await _load_actuator_inputs(session, run.room_id)
 
     env = _environment_from_farm_state(farm_state)
-    # DB 시각과 도메인 시각 동기화 (재시작 복구)
+    # 커밋된 run 시계를 도메인 상태의 권위 있는 시각으로 사용
     env = EnvironmentState(
         temperature_c=env.temperature_c,
         humidity_pct=env.humidity_pct,
@@ -306,8 +378,8 @@ async def step_run(
     sequence = await _next_reading_sequence(session, run.id)
 
     for _ in range(steps):
+        # 스텝 끝 시각의 외기를 읽어 경계조건으로 사용
         outdoor = await weather.read(env.simulation_time + dt_seconds)
-        # OutdoorCondition.simulation_time 을 스텝 끝에 맞춤
         outdoor = OutdoorCondition(
             temperature_c=outdoor.temperature_c,
             humidity_pct=outdoor.humidity_pct,
@@ -322,9 +394,11 @@ async def step_run(
             dt_seconds=dt_seconds,
             params=params,
         )
+        # ① 참값 커밋 대상 갱신 (측정 전)
         _apply_environment_to_farm_state(farm_state, env, run_id=run.id)
         run.simulation_time_seconds = env.simulation_time
 
+        # ② 측정은 참값 env 를 읽기만 한다
         if persist_readings:
             samples = sensor_bank.measure(env, source=ReadingSource.SIMULATED)
             now = datetime.now(UTC)
@@ -351,6 +425,7 @@ async def step_run(
         simulation_time_seconds=run.simulation_time_seconds,
         farm_state_version=farm_state.version,
         readings_inserted=readings_inserted,
+        # 응답의 환경 필드는 항상 FarmState 참값 (readings 가 아님)
         temperature_c=farm_state.temperature_c,
         humidity_pct=farm_state.humidity_pct,
         co2_ppm=farm_state.co2_ppm,

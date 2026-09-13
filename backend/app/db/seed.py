@@ -68,7 +68,10 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
     MVP 데이터를 삽입한다.
 
     - 기본: 동일 FARM_ID 가 있으면 skip (멱등)
-    - force=True: 기존 Farm 을 CASCADE 삭제한 뒤 다시 심는다
+    - force=True: Site 를 SQL DELETE 한 뒤 다시 심는다
+      (ORM delete(Farm) 은 rooms.farm_id NULL 시도 → NOT NULL 위반.
+       DB ON DELETE CASCADE 를 쓰려면 delete(Site) 가 안전하다.)
+      commit 후 expunge_all 로 identity map 충돌 경고를 막는다.
     """
     async with SessionLocal() as session:
         if not force:
