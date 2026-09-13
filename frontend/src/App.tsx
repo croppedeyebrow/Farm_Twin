@@ -1,122 +1,81 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useState } from 'react'
 import './App.css'
 
+type HealthState = 'loading' | 'ok' | 'error'
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [health, setHealth] = useState<HealthState>('loading')
+  const [ready, setReady] = useState<HealthState>('loading')
+  const [errorDetail, setErrorDetail] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkApi() {
+      try {
+        const healthResponse = await fetch('/api/health')
+        if (!healthResponse.ok) {
+          throw new Error(`health ${healthResponse.status}`)
+        }
+        if (!cancelled) {
+          setHealth('ok')
+        }
+
+        const readyResponse = await fetch('/api/health/ready')
+        if (!cancelled) {
+          setReady(readyResponse.ok ? 'ok' : 'error')
+          if (!readyResponse.ok) {
+            const body = (await readyResponse.json().catch(() => null)) as
+              | { detail?: string }
+              | null
+            setErrorDetail(body?.detail ?? `ready ${readyResponse.status}`)
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setHealth('error')
+          setReady('error')
+          setErrorDetail(error instanceof Error ? error.message : 'request failed')
+        }
+      }
+    }
+
+    void checkApi()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <main className="shell">
+      <header className="brand">
+        <p className="brand-name">FarmTwin</p>
+        <h1>실내 스마트팜 운영 트윈</h1>
+        <p className="lede">
+          Day 2 기준 화면 — API health와 DB 연결 상태를 확인합니다.
+        </p>
+      </header>
+
+      <section className="status" aria-live="polite">
+        <div className="status-row">
+          <span>API /health</span>
+          <strong data-state={health}>{labelFor(health)}</strong>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+        <div className="status-row">
+          <span>API /health/ready</span>
+          <strong data-state={ready}>{labelFor(ready)}</strong>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+        {errorDetail ? <p className="error">{errorDetail}</p> : null}
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   )
+}
+
+function labelFor(state: HealthState): string {
+  if (state === 'loading') return '확인 중'
+  if (state === 'ok') return '정상'
+  return '실패'
 }
 
 export default App

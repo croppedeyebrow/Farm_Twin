@@ -70,14 +70,27 @@ compose.yaml  로컬 Docker Compose
 
 각 단계 완료 기준을 통과하기 전 다음 단계로 넘어가지 않는다.
 
-## Quick Start
+## Quick Start (Day 2)
 
-> Day 2~3에서 Compose 전체 기동·Nginx·CI를 붙인 뒤 이 절을 확정한다.
-
-현재(Day 1 기준) 로컬 DB만 Compose로 올릴 수 있다.
+한 명령 전체 기동(Nginx 포함)은 Day 3에서 완성한다. 지금은 DB·API·프론트를 각각 기동한다.
 
 ```bash
+# 1) PostGIS
 docker compose up -d db
+
+# 2) API (backend/)
+cp .env.example .env   # 최초 1회
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# 3) Frontend (frontend/)
+yarn
+yarn dev
 ```
 
-API·프론트 통합 기동은 1단계 나머지 작업에서 완성한다.
+확인:
+
+- API liveness: http://127.0.0.1:8000/health
+- API readiness(DB): http://127.0.0.1:8000/health/ready
+- UI: http://127.0.0.1:5173 (화면에서 `/api/health` 호출)
