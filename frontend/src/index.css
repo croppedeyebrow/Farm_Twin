@@ -1,8 +1,6 @@
 :root {
   color: #1a1f1c;
-  background:
-    radial-gradient(circle at top left, #dceee4 0%, transparent 45%),
-    linear-gradient(160deg, #f3f7f4 0%, #e7efe9 55%, #dfe8e2 100%);
+  background: #d7e4db;
   font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -16,12 +14,15 @@
   box-sizing: border-box;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  width: 100%;
+  min-height: 100%;
 }
 
-#root {
-  min-height: 100vh;
+body {
+  min-width: 320px;
+  overflow: hidden;
 }

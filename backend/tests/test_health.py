@@ -39,3 +39,8 @@ def test_health_ready_unavailable() -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"] == "database unavailable"
+
+
+def test_ws_health() -> None:
+    with client.websocket_connect("/ws/health") as websocket:
+        assert websocket.receive_json() == {"status": "ok"}

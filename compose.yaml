@@ -1,13 +1,14 @@
 # Runtime pin: PostgreSQL 16 + PostGIS 3.4 (see README / .tool-versions)
+
 services:
   db:
     image: postgis/postgis:16-3.4
     container_name: farmtwin-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: farmtwin
-      POSTGRES_USER: farmtwin
-      POSTGRES_PASSWORD: farmtwin
+      POSTGRES_DB: ${POSTGRES_DB:-farmtwin}
+      POSTGRES_USER: ${POSTGRES_USER:-farmtwin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-farmtwin}
       TZ: Asia/Seoul
     ports:
       - "15432:5432"
@@ -18,6 +19,50 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - farmtwin
+
+  api:
+    build:
+      context: ./backend
+    container_name: farmtwin-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://farmtwin:farmtwin@db:5432/farmtwin}
+      TZ: Asia/Seoul
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - farmtwin
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: farmtwin-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - farmtwin
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: farmtwin-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - api
+    networks:
+      - farmtwin
+
+networks:
+  farmtwin:
+    driver: bridge
 
 volumes:
   farmtwin-postgres-data:

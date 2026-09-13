@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { GrowingRoomScene } from './scene/GrowingRoomScene'
 
 type HealthState = 'loading' | 'ok' | 'error'
 
@@ -49,25 +50,27 @@ function App() {
 
   return (
     <main className="shell">
-      <header className="brand">
+      <div className="viewport" aria-label="빈 3D 재배실">
+        <GrowingRoomScene />
+      </div>
+
+      <header className="overlay">
         <p className="brand-name">FarmTwin</p>
         <h1>실내 스마트팜 운영 트윈</h1>
-        <p className="lede">
-          Day 2 기준 화면 — API health와 DB 연결 상태를 확인합니다.
-        </p>
-      </header>
+        <p className="lede">빈 재배실과 랙 골격 — 드래그로 시점을 회전합니다.</p>
 
-      <section className="status" aria-live="polite">
-        <div className="status-row">
-          <span>API /health</span>
-          <strong data-state={health}>{labelFor(health)}</strong>
-        </div>
-        <div className="status-row">
-          <span>API /health/ready</span>
-          <strong data-state={ready}>{labelFor(ready)}</strong>
-        </div>
-        {errorDetail ? <p className="error">{errorDetail}</p> : null}
-      </section>
+        <section className="status" aria-live="polite">
+          <div className="status-row">
+            <span>API /health</span>
+            <strong data-state={health}>{labelFor(health)}</strong>
+          </div>
+          <div className="status-row">
+            <span>API /health/ready</span>
+            <strong data-state={ready}>{labelFor(ready)}</strong>
+          </div>
+          {errorDetail ? <p className="error">{errorDetail}</p> : null}
+        </section>
+      </header>
     </main>
   )
 }

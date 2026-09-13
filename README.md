@@ -48,12 +48,12 @@
 
 ```text
 backend/      FastAPI API, SQLAlchemy, Alembic, 테스트
-frontend/     React + Vite + TypeScript
+frontend/     React + Vite + TypeScript + R3F
 simulator/    가상 센서·상태전이 worker (이후 단계)
-infra/        Nginx 등 인프라 설정 (이후 단계)
+infra/nginx/  Nginx `/api`, `/ws` 라우팅
 load-tests/   k6·부하 생성기 (이후 단계)
 docs/         기획·단계 문서, 브랜치 전략
-.github/      CI/CD 워크플로 (이후 단계)
+.github/      CI 워크플로
 compose.yaml  로컬 Docker Compose
 ```
 
@@ -70,27 +70,33 @@ compose.yaml  로컬 Docker Compose
 
 각 단계 완료 기준을 통과하기 전 다음 단계로 넘어가지 않는다.
 
-## Quick Start (Day 2)
-
-한 명령 전체 기동(Nginx 포함)은 Day 3에서 완성한다. 지금은 DB·API·프론트를 각각 기동한다.
+## Quick Start
 
 ```bash
-# 1) PostGIS
+cp .env.example .env
+docker compose up --build
+```
+
+브라우저: http://127.0.0.1:8080
+
+확인:
+
+- UI + 빈 3D 재배실: http://127.0.0.1:8080
+- API health(Nginx): http://127.0.0.1:8080/api/health
+- API ready(Nginx): http://127.0.0.1:8080/api/health/ready
+
+### 로컬 개발 (Compose DB만)
+
+```bash
 docker compose up -d db
 
-# 2) API (backend/)
-cp .env.example .env   # 최초 1회
+# backend/
+cp .env.example .env   # host용 URL로 수정: 127.0.0.1:15432
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
-# 3) Frontend (frontend/)
+# frontend/
 yarn
 yarn dev
 ```
-
-확인:
-
-- API liveness: http://127.0.0.1:8000/health
-- API readiness(DB): http://127.0.0.1:8000/health/ready
-- UI: http://127.0.0.1:5173 (화면에서 `/api/health` 호출)

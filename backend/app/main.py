@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+"""FarmTwin API entrypoint."""
+
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -14,6 +16,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -43,3 +47,10 @@ async def health_ready() -> dict[str, str]:
         ) from exc
 
     return {"status": "ok", "database": "connected"}
+
+
+@app.websocket("/ws/health")
+async def ws_health(websocket: WebSocket) -> None:
+    await websocket.accept()
+    await websocket.send_json({"status": "ok"})
+    await websocket.close()
