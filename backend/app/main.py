@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.db.session import engine
+from app.routers import farms_router
 
 app = FastAPI(
     title="FarmTwin API",
@@ -44,6 +45,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Day 7: 농장 CRUD / snapshot (Nginx `/api` strip 후 경로)
+app.include_router(farms_router)
 
 
 @app.get("/")

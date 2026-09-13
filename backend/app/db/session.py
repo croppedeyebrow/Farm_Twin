@@ -1,18 +1,34 @@
 """
-비동기 DB 엔진 (1단계 Day 2).
+비동기 DB 엔진·세션 (1단계 Day 2 / 2단계 Day 7).
 
-FastAPI 엔드포인트와 Alembic online migration 이 같은 DATABASE_URL 을 쓴다.
-드라이버는 asyncpg (`postgresql+asyncpg://...`).
+FastAPI Depends(get_db) 로 요청 단위 세션을 제공한다.
 """
 
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from collections.abc import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.config import settings
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
-    # 로컬 PostGIS 컨테이너는 TLS 를 쓰지 않는다.
     connect_args={"ssl": False},
-    # 끊긴 커넥션을 checkout 시점에 감지해 재연결한다.
     pool_pre_ping=True,
 )
+
+SessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """요청 스코프 DB 세션. 커밋은 서비스/라우터에서 명시한다."""
+    async with SessionLocal() as session:
+        yield session

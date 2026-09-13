@@ -84,6 +84,9 @@ docker compose up --build
 - UI + 빈 3D 재배실: http://127.0.0.1:8080
 - API health(Nginx): http://127.0.0.1:8080/api/health
 - API ready(Nginx): http://127.0.0.1:8080/api/health/ready
+- Farm snapshot: http://127.0.0.1:8080/api/farms/22222222-2222-2222-2222-222222222222/snapshot
+
+> Compose API 컨테이너는 migration 만 자동 실행한다. seed 는 호스트에서 `uv run python -m app.db.seed` 로 넣는다.
 
 ### 로컬 개발 (Compose DB만)
 
@@ -94,6 +97,7 @@ docker compose up -d db
 cp .env.example .env   # host용 URL로 수정: 127.0.0.1:15432
 uv sync
 uv run alembic upgrade head
+uv run python -m app.db.seed
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 # frontend/
