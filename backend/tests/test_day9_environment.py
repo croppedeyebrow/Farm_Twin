@@ -171,16 +171,14 @@ def test_led_uptake_reduces_co2() -> None:
     assert lit < dark
 
 
-def test_step_environment_keeps_day10_fields() -> None:
-    state = _base_state(substrate_moisture_pct=40.0, ppfd_umol=100.0)
+def test_step_environment_advances_simulation_time() -> None:
+    state = _base_state()
     next_state = step_environment(
         state,
         outdoor=_outdoor(temperature_c=30.0),
         actuators=ActuatorInputs(hvac=0.5),
         dt_seconds=60.0,
     )
-    assert next_state.substrate_moisture_pct == 40.0
-    assert next_state.ppfd_umol == 100.0
     assert next_state.simulation_time == 60.0
 
 

@@ -32,8 +32,8 @@ FarmTwin 목표는 "난수 생성기"가 아니라 **인과관계가 설명 가�
 clamp: 적분 후 물리 범위로 잘라 발산을 막는다.
 (정밀 포화·상대습도 곡선은 Day 10+ 에서 보강 가능)
 
-Day 9 갱신: temperature / humidity / co2
-Day 10 예정: substrate_moisture / ppfd (지금은 입력 그대로 통과)
+Day 9: temperature / humidity / co2
+Day 10: substrate_moisture / ppfd (+ CO₂ 흡수를 PPFD 비율로 연동)
 """
 
 from __future__ import annotations
@@ -160,12 +160,98 @@ def step_humidity(
     return _clamp(next_h, params.humidity_min_pct, params.humidity_max_pct)
 
 
+def step_ppfd(
+    ppfd_umol: float,
+    *,
+    actuators: ActuatorInputs,
+    dt_seconds: float,
+    params: EnvironmentModelParams = DEFAULT_ENV_PARAMS,
+) -> float:
+    """
+    PPFD P [µmol/m²/s] 한 스텝.
+
+    ---------------------------------------------------------------------------
+    연속 시간 식 (개념)
+    ---------------------------------------------------------------------------
+        P_target = P_max · u_led
+        dP/dt = k_track · (P_target − P)
+
+    근거
+    ----
+    - LED dimming 과 광량(PPFD)은 거의 선형에 가깝다 (MVP 선형 근사).
+    - 즉시 ON/OFF 가 아니라 1차 추적 → "켜면 서서히 밝아짐" 데모.
+    - 발열(temp_led_heat)은 여전히 u_led 로 직접 연결 (열관성 ≠ 광량).
+
+    이산
+    ----
+        P' = P + Δt · k_track · (P_max·u_led − P)
+    """
+    if dt_seconds < 0:
+        raise ValueError("dt_seconds must be >= 0")
+    if dt_seconds == 0:
+        return ppfd_umol
+
+    target = params.ppfd_led_max_umol * actuators.led
+    rate = params.ppfd_track_per_s * (target - ppfd_umol)
+    delta = dt_seconds * rate
+    # 오일러 한 스텝에서 목표를 넘지 않도록 (오버슈트 방지)
+    if abs(delta) >= abs(target - ppfd_umol):
+        next_p = target
+    else:
+        next_p = ppfd_umol + delta
+    return _clamp(next_p, params.ppfd_min_umol, params.ppfd_max_umol)
+
+
+def step_substrate_moisture(
+    substrate_moisture_pct: float,
+    *,
+    actuators: ActuatorInputs,
+    dt_seconds: float,
+    params: EnvironmentModelParams = DEFAULT_ENV_PARAMS,
+) -> float:
+    """
+    배지수분 S [%] 한 스텝.
+
+    ---------------------------------------------------------------------------
+    연속 시간 식 (개념)
+    ---------------------------------------------------------------------------
+        dS/dt = −k_dry
+              + k_irr · u_irrigation
+              − k_trans · u_led
+
+    근거
+    ----
+    - 관수 없으면 증발·식물 흡수로 천천히 감소 (3단계 테스트 요구).
+    - 관수 ON 시 배지가 습해진다.
+    - LED ON 시 증발(광합성 transpiration) 추가 — Day 11 센서와 별개로 **참값**만 변화.
+
+    이산
+    ----
+        S' = S + Δt · (−dry + irr·u_pump − trans·u_led)
+    """
+    if dt_seconds < 0:
+        raise ValueError("dt_seconds must be >= 0")
+    if dt_seconds == 0:
+        return substrate_moisture_pct
+
+    dry = -params.substrate_drydown_per_s
+    wet = params.substrate_irrigation_per_s * actuators.irrigation_pump
+    transpire = -params.substrate_transpiration_per_s * actuators.led
+    next_s = substrate_moisture_pct + dt_seconds * (dry + wet + transpire)
+    return _clamp(
+        next_s,
+        params.substrate_moisture_min_pct,
+        params.substrate_moisture_max_pct,
+    )
+
+
 def step_co2(
     co2_ppm: float,
     *,
     outdoor_co2_ppm: float,
     actuators: ActuatorInputs,
     dt_seconds: float,
+    ppfd_umol: float = 0.0,
     params: EnvironmentModelParams = DEFAULT_ENV_PARAMS,
 ) -> float:
     """
@@ -180,9 +266,9 @@ def step_co2(
 
     근거
     ----
-    - 식물 군락의 순광합성은 광량에 크게 의존한다.
-      MVP 는 PPFD 방정식을 Day 10 에 두므로, 여기서는 **LED 출력 ≈ 광 공급**
-      대리변수로 흡수를 켠다. (암기에는 흡수 ≈ 0)
+    - 식물 군락의 순광합성은 광량(PPFD)에 크게 의존한다.
+      Day 10: uptake ∝ PPFD / P_max (0~1). PPFD=0 이면 암기·발생만.
+      (하위 호환: P_max=0 이면 u_led 로 fallback)
     - 환기는 온·습도와 동일하게 (C_out − C) 1차 혼합.
       실내가 높고 외기가 낮으면 환기 시 농도가 떨어진다 (환기 시나리오).
     - g_base: 완전 밀폐·암기에서도 천천히 쌓이는 약한 발생을 넣어
@@ -197,10 +283,13 @@ def step_co2(
     if dt_seconds == 0:
         return co2_ppm
 
-    # 상시 약한 발생 (설비와 무관)
     generation = params.co2_base_generation_per_s
-    # LED ON 비율만큼 광합성 흡수 (음수 기여)
-    uptake = -params.co2_plant_uptake_per_s * actuators.led
+    # step_environment 는 갱신 ppfd 를 넘긴다. 단위 테스트·ppfd=0 이면 u_led fallback.
+    if params.ppfd_led_max_umol > 0 and ppfd_umol > 0:
+        light_factor = min(1.0, ppfd_umol / params.ppfd_led_max_umol)
+    else:
+        light_factor = actuators.led
+    uptake = -params.co2_plant_uptake_per_s * light_factor
     # 환기 혼합: C_out 쪽으로
     vent = (
         params.co2_vent_mix_per_s
@@ -233,7 +322,7 @@ def step_environment(
     출력
     ----
     새 EnvironmentState. simulation_time 은 state + dt 로 전진.
-    substrate_moisture / ppfd 는 Day 10 까지 복사만 한다.
+    ppfd → substrate → T/H/CO₂ 순. CO₂ 흡수는 갱신된 ppfd 를 사용.
 
     불변
     ----
@@ -243,6 +332,18 @@ def step_environment(
     if dt_seconds < 0:
         raise ValueError("dt_seconds must be >= 0")
 
+    ppfd = step_ppfd(
+        state.ppfd_umol,
+        actuators=actuators,
+        dt_seconds=dt_seconds,
+        params=params,
+    )
+    substrate = step_substrate_moisture(
+        state.substrate_moisture_pct,
+        actuators=actuators,
+        dt_seconds=dt_seconds,
+        params=params,
+    )
     temperature = step_temperature(
         state.temperature_c,
         outdoor_temperature_c=outdoor.temperature_c,
@@ -262,14 +363,14 @@ def step_environment(
         outdoor_co2_ppm=outdoor.co2_ppm,
         actuators=actuators,
         dt_seconds=dt_seconds,
+        ppfd_umol=ppfd,
         params=params,
     )
     return EnvironmentState(
         temperature_c=temperature,
         humidity_pct=humidity,
         co2_ppm=co2,
-        # Day 10: 배지 수분·PPFD 방정식이 여기로 들어온다
-        substrate_moisture_pct=state.substrate_moisture_pct,
-        ppfd_umol=state.ppfd_umol,
+        substrate_moisture_pct=substrate,
+        ppfd_umol=ppfd,
         simulation_time=state.simulation_time + dt_seconds,
     )

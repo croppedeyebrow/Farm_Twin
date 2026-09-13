@@ -1,0 +1,42 @@
+# FarmTwin 환경 모델 계수 (3단계 Day 10)
+# 단위·의미: backend/app/domain/simulation/params.py 주석 참고
+# 시나리오 튜닝 시 이 파일만 바꾸고 load_environment_params() 로 로드한다.
+
+[environment_model]
+# --- 온도 [°C/s 또는 1/s] ---
+temp_outdoor_leak_per_s = 0.000555556   # 1/1800
+temp_hvac_cool_per_s = 0.004
+temp_led_heat_per_s = 0.0015
+temp_vent_mix_per_s = 0.001666667        # 1/600
+
+# --- 습도 [%RH/s 또는 1/s] ---
+humidity_outdoor_leak_per_s = 0.000555556
+humidity_dehumidifier_per_s = 0.01
+humidity_vent_mix_per_s = 0.001666667
+humidity_irrigation_per_s = 0.002
+
+# --- CO₂ [ppm/s 또는 1/s] ---
+co2_plant_uptake_per_s = 0.05
+co2_vent_mix_per_s = 0.001111111         # 1/900
+co2_base_generation_per_s = 0.005
+
+# --- 배지수분 [%/s] (Day 10) ---
+substrate_drydown_per_s = 0.00008        # 관수 없을 때 자연 감소
+substrate_irrigation_per_s = 0.015       # 관수 풀출력 시 증가
+substrate_transpiration_per_s = 0.00004  # LED ON 시 추가 증발
+
+# --- PPFD [µmol/m²/s] (Day 10) ---
+ppfd_led_max_umol = 800.0                # LED 풀출력 목표 PPFD
+ppfd_track_per_s = 0.5                     # 목표 PPFD 1차 추적 속도 [1/s]
+
+# --- 물리 clamp 범위 ---
+temperature_min_c = -10.0
+temperature_max_c = 50.0
+humidity_min_pct = 0.0
+humidity_max_pct = 100.0
+co2_min_ppm = 300.0
+co2_max_ppm = 5000.0
+substrate_moisture_min_pct = 0.0
+substrate_moisture_max_pct = 100.0
+ppfd_min_umol = 0.0
+ppfd_max_umol = 2000.0

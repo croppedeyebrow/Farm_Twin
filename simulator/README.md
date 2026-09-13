@@ -4,27 +4,24 @@
 
 ## 현재
 
-### Day 8
+### Day 8~9
 - `backend/app/domain/simulation/clock.py` — SimulationClock
 - `backend/app/domain/simulation/weather.py` — API/REPLAY/SYNTHETIC adapter
-- `backend/app/domain/simulation/state.py` — EnvironmentState / ActuatorInputs
+- `backend/app/domain/simulation/environment.py` — 온·습·CO₂ 상태전이
 
-### Day 9
-- `backend/app/domain/simulation/environment.py` — 온·습도·CO₂ 상태전이
-- `backend/app/domain/simulation/params.py` — MVP 계수 (Day 10 설정 파일화 예정)
+### Day 10
+- `environment.py` — 배지수분·PPFD (LED 1차 추적)
+- `config/environment_model.toml` — 모델 계수 (튜닝용)
+- `config_loader.py` — TOML → EnvironmentModelParams
 
 데모:
 
 ```bash
-# repo root 기준, backend 의존성 설치된 환경에서
-python -m simulator.app.demo_clock
-# 또는
-cd simulator && python -m app.demo_clock
+cd backend && uv run python ../simulator/app/demo_clock.py
 ```
 
 ## 이후
 
-- Day 10: 배지수분·PPFD·계수 설정 파일
 - Day 11: 센서 noise·readings 저장·run 제어
 
 ## 원칙
