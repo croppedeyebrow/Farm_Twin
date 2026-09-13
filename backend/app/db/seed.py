@@ -32,7 +32,7 @@ import uuid
 from datetime import UTC, datetime
 
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.db.models import (
     Actuator,
@@ -71,14 +71,17 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
     - force=True: 기존 Farm 을 CASCADE 삭제한 뒤 다시 심는다
     """
     async with SessionLocal() as session:
-        existing = await session.scalar(select(Farm).where(Farm.id == FARM_ID))
-        if existing and not force:
-            return {"status": "skipped", "farm_id": str(FARM_ID)}
-
-        if existing and force:
-            # farms FK 가 CASCADE 이므로 하위 룸/센서/상태도 함께 제거된다.
-            await session.delete(existing)
+        if not force:
+            existing = await session.scalar(select(Farm).where(Farm.id == FARM_ID))
+            if existing:
+                return {"status": "skipped", "farm_id": str(FARM_ID)}
+        else:
+            # ORM session.delete(Farm) 은 relationship 때문에 rooms.farm_id 를
+            # NULL 로 만들려다 NOT NULL 위반이 난다.
+            # Site 부터 SQL DELETE → DB ON DELETE CASCADE 로 하위 전부 제거.
+            await session.execute(delete(Site).where(Site.id == SITE_ID))
             await session.commit()
+            session.expunge_all()
 
         # WKT POINT(lon lat) — GeoAlchemy2 Geography(4326)
         site = Site(

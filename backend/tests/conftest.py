@@ -16,7 +16,13 @@ from app.db.session import engine
 
 @pytest.fixture
 async def require_postgres() -> None:
-    """DB 연결 불가 시 해당 테스트 스킵 (로컬에 PostGIS 없을 때)."""
+    """
+    DB 연결 불가 시 해당 테스트 스킵.
+
+    Windows + pytest-asyncio 는 function-scoped loop 마다
+    이전 풀 커넥션이 무효가 되므로 먼저 dispose 한다.
+    """
+    await engine.dispose()
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))

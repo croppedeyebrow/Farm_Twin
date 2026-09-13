@@ -7,6 +7,7 @@ FarmTwin API 엔트리포인트 (1단계 Day 2~3, 2단계 Day 7 라우터 연결
 - liveness(`/health`) / readiness(`/health/ready`) 분리
 - WebSocket 라우팅 검증용 `/ws/health` 골격
 - Day 7: farms snapshot/state/sensors/actuators/readings 라우터 등록
+- Day 11: simulations start/pause/resume/stop/step 라우터 등록
 
 설계 배경
 --------
@@ -23,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.db.session import engine
-from app.routers import farms_router
+from app.routers import farms_router, simulations_router
 
 app = FastAPI(
     title="FarmTwin API",
@@ -49,6 +50,8 @@ app.add_middleware(
 
 # Day 7: 농장 CRUD / snapshot (Nginx `/api` strip 후 경로)
 app.include_router(farms_router)
+# Day 11: 시뮬레이션 run 제어·스텝
+app.include_router(simulations_router)
 
 
 @app.get("/")
