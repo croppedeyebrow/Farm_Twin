@@ -82,3 +82,38 @@ class SimulationStatus(StrEnum):
     PAUSED = "paused"
     STOPPED = "stopped"
     FAILED = "failed"
+
+
+class ControlCommandStatus(StrEnum):
+    """제어 명령 수명주기. command 와 event 를 합치지 않는다."""
+
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ControlEventType(StrEnum):
+    """명령에 대한 적용 결과 이벤트."""
+
+    APPLIED = "applied"
+    STOPPED = "stopped"
+    FAILED = "failed"
+    REJECTED = "rejected"
+
+
+class FaultType(StrEnum):
+    """센서 고장 주입 유형 (6단계 파이프라인과 동일 계약)."""
+
+    SPIKE = "spike"
+    STUCK = "stuck"
+    DROPOUT = "dropout"
+
+
+class RuleComparator(StrEnum):
+    """규칙 조건 비교 연산자."""
+
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"

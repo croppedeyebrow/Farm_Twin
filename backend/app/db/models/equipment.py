@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -85,6 +85,10 @@ class Actuator(TimestampMixin, Base):
     __tablename__ = "actuators"
     __table_args__ = (
         UniqueConstraint("room_id", "code", name="uq_actuators_room_code"),
+        CheckConstraint(
+            "output_ratio >= 0 AND output_ratio <= 1",
+            name="ck_actuators_output_ratio",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
