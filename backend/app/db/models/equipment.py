@@ -10,26 +10,17 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.models.mixins import TimestampMixin
+from app.db.models.types import str_enum
 from app.domain.enums import ActuatorMode, ActuatorType, SensorType, Unit
 
 if TYPE_CHECKING:
     from app.db.models.hierarchy import Rack, Room
-
-
-def _str_enum(enum_cls: type, length: int = 32) -> Enum:
-    """PostgreSQL native ENUM 대신 VARCHAR + Python Enum 으로 저장한다."""
-    return Enum(
-        enum_cls,
-        values_callable=lambda members: [item.value for item in members],
-        native_enum=False,
-        length=length,
-    )
 
 
 class Sensor(TimestampMixin, Base):
@@ -66,11 +57,11 @@ class Sensor(TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     sensor_type: Mapped[SensorType] = mapped_column(
-        _str_enum(SensorType),
+        str_enum(SensorType),
         nullable=False,
         index=True,
     )
-    unit: Mapped[Unit] = mapped_column(_str_enum(Unit), nullable=False)
+    unit: Mapped[Unit] = mapped_column(str_enum(Unit), nullable=False)
     # 가상 센서 모델 버전 — 재현성/lineage 용
     model_version: Mapped[str] = mapped_column(
         String(64),
@@ -110,12 +101,12 @@ class Actuator(TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     actuator_type: Mapped[ActuatorType] = mapped_column(
-        _str_enum(ActuatorType),
+        str_enum(ActuatorType),
         nullable=False,
         index=True,
     )
     mode: Mapped[ActuatorMode] = mapped_column(
-        _str_enum(ActuatorMode, length=16),
+        str_enum(ActuatorMode, length=16),
         nullable=False,
         default=ActuatorMode.OFF,
         server_default=ActuatorMode.OFF.value,

@@ -7,12 +7,18 @@ Alembic 과 앱이 모든 테이블을 인식하도록 여기서 re-export / imp
 
 from app.db.models.equipment import Actuator, Sensor
 from app.db.models.hierarchy import Farm, Rack, Room, Site
+from app.db.models.simulation import SimulationRun, WeatherSnapshot
+from app.db.models.telemetry import FarmState, SensorReading
 
 __all__ = [
     "Actuator",
     "Farm",
+    "FarmState",
     "Rack",
     "Room",
     "Sensor",
+    "SensorReading",
+    "SimulationRun",
     "Site",
+    "WeatherSnapshot",
 ]

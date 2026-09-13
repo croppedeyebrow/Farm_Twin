@@ -21,10 +21,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
-from app.db.base import Base
 
 # Day 4+ ORM 모델을 metadata 에 등록 (autogenerate / upgrade 대상).
 from app.db import models as _models  # noqa: F401
+from app.db.base import Base
 
 config = context.config
 # ini 파일 값보다 앱 설정을 우선한다.
