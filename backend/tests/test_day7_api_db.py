@@ -28,7 +28,7 @@ SENSOR_TEMP_ID = uuid.UUID("66666666-6666-6666-6666-666666666661")
 
 
 @pytest.fixture
-async def seeded_farm() -> None:
+async def seeded_farm(require_postgres: None) -> None:
     # function-scoped event loop 와 이전 커넥션 풀이 섞이지 않게 초기화
     await engine.dispose()
     await seed_mvp(force=False)

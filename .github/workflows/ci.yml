@@ -1,8 +1,8 @@
 # =============================================================================
-# FarmTwin CI (1단계 Day 3)
+# FarmTwin CI (1단계 Day 3 / 2단계 Day 7+)
 # -----------------------------------------------------------------------------
 # PR / main push 시:
-#   1) backend  lint + test
+#   1) backend  lint + test (PostGIS 서비스 + alembic migrate)
 #   2) frontend lint + build
 #   3) (둘 다 성공 시) Docker 이미지 빌드 검증
 #
@@ -24,9 +24,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Day 7+ 통합 테스트(seed·snapshot·PostGIS)용
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: farmtwin
+          POSTGRES_PASSWORD: farmtwin
+          POSTGRES_DB: farmtwin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U farmtwin -d farmtwin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       # Settings 가 import 시 DATABASE_URL 을 요구한다.
-      # readiness 테스트는 engine 을 mock 하므로 실제 DB는 필요 없다.
+      # 서비스 컨테이너는 job 에서 127.0.0.1:5432 로 접근한다.
       DATABASE_URL: postgresql+asyncpg://farmtwin:farmtwin@127.0.0.1:5432/farmtwin
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +57,12 @@ jobs:
 
       - name: Ruff check
         run: uv run ruff check .
+
+      - name: Alembic upgrade
+        run: uv run alembic upgrade head
+
+      - name: Seed MVP
+        run: uv run python -m app.db.seed
 
       - name: Pytest
         run: uv run pytest
