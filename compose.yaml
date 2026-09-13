@@ -1,0 +1,23 @@
+# Runtime pin: PostgreSQL 16 + PostGIS 3.4 (see README / .tool-versions)
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: farmtwin-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: farmtwin
+      POSTGRES_USER: farmtwin
+      POSTGRES_PASSWORD: farmtwin
+      TZ: Asia/Seoul
+    ports:
+      - "15432:5432"
+    volumes:
+      - farmtwin-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmtwin -d farmtwin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  farmtwin-postgres-data:
