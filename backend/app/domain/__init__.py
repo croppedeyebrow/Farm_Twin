@@ -1,7 +1,7 @@
-"""도메인 패키지 (2단계).
+"""도메인 패키지 (2단계~4단계).
 
 ORM 과 분리된 순수 도메인 상수·규칙.
-- enums: 센서/설비/품질/제어/고장 상태값
-- units: 센서 타입 ↔ 단위·물리 범위
-- time_semantics: simulation_time / sampled_at / ingested_at 정의
+- enums / units / time_semantics
+- simulation: 시계·외기·환경 전이·가상 센서 (3단계)
+- control: 규칙·게이트·액추에이터·폐쇄 루프 (4단계 Day 12~15)
 """
