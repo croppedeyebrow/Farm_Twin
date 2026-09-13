@@ -1,4 +1,11 @@
-"""Farm / snapshot 응답 스키마 (2단계 Day 7)."""
+"""
+Farm / snapshot 응답 스키마 (2단계 Day 7).
+
+ORM 엔티티를 API JSON 으로 변환한다.
+`from_attributes=True` 로 SQLAlchemy 모델 → Pydantic 매핑을 허용한다.
+
+주의: FarmStateOut 은 **참값**, SensorReadingOut 은 **측정값** 이다.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +25,8 @@ from app.domain.enums import (
 
 
 class FarmSummary(BaseModel):
+    """농장 목록/상세용 요약."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -28,6 +37,8 @@ class FarmSummary(BaseModel):
 
 
 class RoomSummary(BaseModel):
+    """재배실 요약."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -37,6 +48,8 @@ class RoomSummary(BaseModel):
 
 
 class RackSummary(BaseModel):
+    """랙 요약. position_* 는 3D 배치용 선택 좌표."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -49,6 +62,8 @@ class RackSummary(BaseModel):
 
 
 class SensorSummary(BaseModel):
+    """센서 메타. 시계열 값은 readings API 로 분리."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -62,6 +77,8 @@ class SensorSummary(BaseModel):
 
 
 class ActuatorSummary(BaseModel):
+    """액추에이터 메타 + 현재 운전 캐시."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -74,7 +91,7 @@ class ActuatorSummary(BaseModel):
 
 
 class FarmStateOut(BaseModel):
-    """환경 참값 스냅샷."""
+    """환경 참값 스냅샷 (farm_states)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -92,6 +109,8 @@ class FarmStateOut(BaseModel):
 
 
 class SensorReadingOut(BaseModel):
+    """가상 센서 측정값 한 점 (sensor_readings)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -107,7 +126,11 @@ class SensorReadingOut(BaseModel):
 
 
 class FarmSnapshot(BaseModel):
-    """관제 초기 로딩용 통합 스냅샷 (참값 + 메타)."""
+    """
+    관제 초기 로딩용 통합 스냅샷.
+
+    REST 로 한 번에 메타+참값을 받고, 이후 증분은 WebSocket(5단계)으로 간다.
+    """
 
     farm: FarmSummary
     room: RoomSummary

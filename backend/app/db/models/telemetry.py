@@ -1,12 +1,15 @@
 """
 환경 참값·센서 측정값 (2단계 Day 5).
 
-구분
-----
-- FarmState     : 시뮬레이터가 계산한 환경 **참값** (room 당 최신 1행 + version)
-- SensorReading : 가상 센서가 관측한 **측정값** (오차·고장·품질 포함, append-only)
+구분 (절대 혼동 금지)
+--------------------
+- FarmState     : 시뮬레이터가 계산한 환경 **참값**
+                  room 당 최신 1행 + version 단조 증가. 센서 noise 없음.
+- SensorReading : 가상 센서가 관측한 **측정값**
+                  오차·고장·품질 포함, append-only (원본 수정 금지).
 
 명령/적용 결과는 Day 6 Control* 테이블이 담당한다.
+센서 noise 는 FarmState 를 바꾸지 않는다 (3단계 완료 기준).
 """
 
 from __future__ import annotations

@@ -1,8 +1,15 @@
 """
 시간 컬럼 의미 (2단계 Day 5 확정).
 
-DB·API·시뮬레이터·프론트가 같은 정의를 쓰도록 도메인에 고정한다.
-자세한 표는 docs/FarmTwin_실내스마트팜/01_종합_기획_문서/시간_컬럼_의미.md
+문제
+----
+`created_at` / `sampled_at` / `simulation_time` 을 혼동하면
+지연 분석·재현·stale 판정이 전부 틀어진다.
+
+해결
+----
+DB·API·시뮬레이터·프론트가 같은 정의를 쓰도록 도메인 dict 로 고정한다.
+사람용 표는 docs/FarmTwin_실내스마트팜/01_종합_기획_문서/시간_컬럼_의미.md
 """
 
 from __future__ import annotations

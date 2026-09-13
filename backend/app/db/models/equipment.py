@@ -1,8 +1,21 @@
 """
 센서·액추에이터 메타데이터 모델 (2단계 Day 4).
 
-시계열(readings)과 명령/이벤트는 Day 5~6 테이블이 담당한다.
-여기 테이블은 "무엇이 어디에 설치되었는지" 만 정의한다.
+역할
+----
+"무엇이 어디에 설치되었는지" 만 정의한다.
+시계열(readings)·명령/이벤트는 Day 5~6 테이블이 담당한다.
+
+Sensor
+------
+- room_id 필수, rack_id 선택 (룸 공용 vs 랙 부착)
+- unit 은 seed 시 `default_unit_for(sensor_type)` 로 맞춘다
+- model_version: 가상 센서 모델 lineage (재현성)
+
+Actuator
+--------
+- mode / output_ratio: **현재 운전 상태 캐시**
+- 이력은 control_commands / control_events 에 append
 """
 
 from __future__ import annotations
@@ -24,13 +37,7 @@ if TYPE_CHECKING:
 
 
 class Sensor(TimestampMixin, Base):
-    """
-    센서 메타데이터.
-
-    - room_id: 소속 재배실 (필수)
-    - rack_id: 랙 부착 센서면 설정, 룸 공용이면 null
-    - unit: 정규화 저장 단위 (SensorType 기본값과 일치시키는 것을 권장)
-    """
+    """센서 메타데이터. readings 는 sensor_readings 테이블."""
 
     __tablename__ = "sensors"
     __table_args__ = (
@@ -48,6 +55,7 @@ class Sensor(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # 랙 부착이면 설정, 룸 공용이면 null (예: 배지수분만 랙)
     rack_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("racks.id", ondelete="SET NULL"),
@@ -75,12 +83,7 @@ class Sensor(TimestampMixin, Base):
 
 
 class Actuator(TimestampMixin, Base):
-    """
-    액추에이터 메타데이터.
-
-    현재 운전 상태는 여기의 mode/output_ratio 로 캐시하고,
-    이력은 control_commands / control_events (Day 6) 에 남긴다.
-    """
+    """액추에이터 메타데이터 + 현재 운전 캐시."""
 
     __tablename__ = "actuators"
     __table_args__ = (

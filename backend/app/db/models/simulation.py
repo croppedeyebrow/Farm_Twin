@@ -1,8 +1,15 @@
 """
 시뮬레이션 실행·외기 스냅샷 (2단계 Day 5).
 
-SimulationRun 은 한 번의 실험/데모 세션이다.
-WeatherSnapshot 은 그 세션에 투입된 외기 입력 이력이다.
+SimulationRun
+-------------
+한 번의 실험/데모 세션. seed·weather_mode·가상 시계·worker lease 를 가진다.
+불변조건: 한 run 에는 active worker 하나만 (4단계에서 lease 로 강제).
+
+WeatherSnapshot
+---------------
+그 세션에 투입된 외기 입력 이력 (append).
+created_at 대신 sampled_at / ingested_at / simulation_time 을 쓴다.
 """
 
 from __future__ import annotations

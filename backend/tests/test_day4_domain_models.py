@@ -1,4 +1,9 @@
-"""2단계 Day 4 — enum / 단위 / ORM 메타데이터 단위 테스트."""
+"""
+2단계 Day 4 — enum / 단위 / ORM 메타데이터 단위 테스트.
+
+검증: 센서 단위·범위 커버리지, Day4 테이블 메타데이터 등록,
+Site→…→Actuator 관계 속성 존재.
+"""
 
 from app.db.base import Base
 from app.db.models import Actuator, Farm, Rack, Room, Sensor, Site

@@ -1,11 +1,12 @@
 """
-FarmTwin API 엔트리포인트 (1단계 Day 2~3).
+FarmTwin API 엔트리포인트 (1단계 Day 2~3, 2단계 Day 7 라우터 연결).
 
 역할
 ----
 - FastAPI 앱 생성과 CORS 설정
 - liveness(`/health`) / readiness(`/health/ready`) 분리
 - WebSocket 라우팅 검증용 `/ws/health` 골격
+- Day 7: farms snapshot/state/sensors/actuators/readings 라우터 등록
 
 설계 배경
 --------

@@ -1,4 +1,11 @@
-"""2단계 Day 7 — migration 이후 API·제약 통합 테스트 (실 DB 필요)."""
+"""
+2단계 Day 7 — migration 이후 API·제약 통합 테스트 (실 DB 필요).
+
+seed 고정 UUID 로 /farms snapshot·state·readings 를 검증하고,
+UNIQUE/CHECK 등 DB 제약이 살아 있는지 확인한다.
+Windows 에서는 function-scoped event loop 와 풀이 섞이지 않게
+fixture 에서 engine.dispose() 한다.
+"""
 
 from __future__ import annotations
 

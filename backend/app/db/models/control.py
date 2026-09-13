@@ -1,11 +1,17 @@
 """
 제어 규칙·명령·이벤트 (2단계 Day 6).
 
+테이블 역할
+-----------
+- ControlRule   : 자동 제어 조건 (히스테리시스 start/stop threshold)
+- ControlCommand: 액추에이터에 대한 **목표** 명령 (idempotency_key)
+- ControlEvent  : 명령의 **적용 결과** (append-only)
+
 불변조건
 --------
-- ControlCommand(목표) 와 ControlEvent(적용 결과) 를 한 테이블에 합치지 않는다.
+- Command 와 Event 를 한 테이블에 합치지 않는다.
 - 규칙 변경은 version 을 증가시킨다.
-- command 에는 idempotency_key 로 중복 적용을 막는다.
+- 동일 idempotency_key 로 중복 명령을 막는다.
 """
 
 from __future__ import annotations

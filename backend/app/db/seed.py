@@ -1,10 +1,27 @@
 """
 MVP seed data (2단계 Day 7).
 
-1개 Site / Farm / Room, 랙 3개, 센서·액추에이터, 초기 FarmState,
-온도 제어 규칙 1개, SimulationRun 1개를 넣는다.
+목적
+----
+신규 환경에서 migration 직후 바로 관제·시뮬을 돌릴 수 있는
+최소 농장 그래프를 넣는다.
 
-사용:
+구성
+----
+- Site 1 (서울 시청 근처 Point) → Farm 1 → Room 1
+- Rack 3 (1단계 3D 씬 R1~R3 과 좌표 대응)
+- Sensor 5종 / Actuator 5종
+- FarmState 초기 참값 (version=1)
+- ControlRule 1 (고온 시 HVAC)
+- SimulationRun 1 (seed=42, CREATED)
+
+고정 UUID
+---------
+문서·테스트·프론트가 같은 ID 를 쓰도록 하드코딩한다.
+(데이터_사전.md 참고)
+
+사용
+----
     uv run python -m app.db.seed
 """
 
@@ -47,16 +64,23 @@ RUN_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 
 
 async def seed_mvp(*, force: bool = False) -> dict[str, str]:
-    """MVP 데이터를 삽입한다. 이미 Farm 이 있으면 건너뛴다(force 제외)."""
+    """
+    MVP 데이터를 삽입한다.
+
+    - 기본: 동일 FARM_ID 가 있으면 skip (멱등)
+    - force=True: 기존 Farm 을 CASCADE 삭제한 뒤 다시 심는다
+    """
     async with SessionLocal() as session:
         existing = await session.scalar(select(Farm).where(Farm.id == FARM_ID))
         if existing and not force:
             return {"status": "skipped", "farm_id": str(FARM_ID)}
 
         if existing and force:
+            # farms FK 가 CASCADE 이므로 하위 룸/센서/상태도 함께 제거된다.
             await session.delete(existing)
             await session.commit()
 
+        # WKT POINT(lon lat) — GeoAlchemy2 Geography(4326)
         site = Site(
             id=SITE_ID,
             name="Seoul Demo Site",
@@ -79,6 +103,7 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
         )
         session.add_all([site, farm, room])
 
+        # 3D GrowingRoomScene 의 RACK_POSITIONS 와 x 간격을 맞춘다.
         racks = [
             Rack(
                 id=uuid.UUID(f"55555555-5555-5555-5555-55555555555{i}"),
@@ -93,13 +118,18 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
         ]
         session.add_all(racks)
 
+        # 배지수분만 랙 부착, 나머지는 룸 공용 센서로 둔다.
         sensors: list[Sensor] = []
         for index, sensor_type in enumerate(SensorType, start=1):
             sensors.append(
                 Sensor(
                     id=uuid.UUID(f"66666666-6666-6666-6666-66666666666{index}"),
                     room_id=ROOM_ID,
-                    rack_id=racks[0].id if sensor_type is SensorType.SUBSTRATE_MOISTURE else None,
+                    rack_id=(
+                        racks[0].id
+                        if sensor_type is SensorType.SUBSTRATE_MOISTURE
+                        else None
+                    ),
                     code=sensor_type.value,
                     name=sensor_type.value.replace("_", " ").title(),
                     sensor_type=sensor_type,
@@ -123,6 +153,7 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
         ]
         session.add_all(actuators)
 
+        # 참값 초기 상태 — 센서 noise 가 아직 없는 환경 모델 값
         session.add(
             FarmState(
                 farm_id=FARM_ID,
@@ -137,6 +168,7 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
                 simulation_time=0.0,
             )
         )
+        # 4단계 규칙 엔진이 사용할 샘플 규칙 (히스테리시스)
         session.add(
             ControlRule(
                 farm_id=FARM_ID,

@@ -1,8 +1,19 @@
 """
 공간·농장 계층 모델 (2단계 Day 4).
 
+계층
+----
 Site → Farm → Room → Rack
-참값/측정/명령 테이블(Day 5~6)이 이 계층을 FK 로 참조한다.
+
+의미
+----
+- Site: 지리 위치(PostGIS). 기상 기준점·거리 계산.
+- Farm: 운영 단위. API `/farms/{id}` 의 루트.
+- Room: 독립 제어 단위. FarmState / 규칙 / 센서·액추에이터 소속.
+- Rack: 재배 랙. 1단계 R3F 씬의 랙과 code·좌표로 대응.
+
+하위 시계열·명령 테이블(Day 5~6)은 이 계층을 FK 로 참조한다.
+code 는 부모 스코프 안에서 UNIQUE (사람이 읽는 식별자).
 """
 
 from __future__ import annotations
@@ -24,9 +35,11 @@ if TYPE_CHECKING:
 
 class Site(TimestampMixin, Base):
     """
-    사이트(부지). PostGIS geography Point(4326) 로 위치를 저장한다.
+    사이트(부지).
 
-    기상 기준점과의 거리 계산(`ST_DWithin`)에 사용한다.
+    location: WGS84 Point geography.
+    ST_DWithin 등으로 기상 관측점과의 거리를 계산할 때 사용한다.
+    GiST 인덱스는 GeoAlchemy2 가 컬럼 생성 시 자동으로 만든다 (Day 7 migration).
     """
 
     __tablename__ = "sites"
@@ -37,7 +50,7 @@ class Site(TimestampMixin, Base):
         default=uuid.uuid4,
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    # GeoAlchemy2 Geography — WGS84 경위도. GiST 인덱스는 migration(Day 7)에서 추가.
+    # GeoAlchemy2 Geography — WGS84 경위도 (lon, lat)
     location = mapped_column(
         Geography(geometry_type="POINT", srid=4326),
         nullable=False,
@@ -48,7 +61,12 @@ class Site(TimestampMixin, Base):
 
 
 class Farm(TimestampMixin, Base):
-    """농장. 하나의 Site 아래 여러 Farm 이 있을 수 있다."""
+    """
+    농장.
+
+    하나의 Site 아래 여러 Farm 이 있을 수 있다.
+    seed 고정 ID: 22222222-... (데이터_사전.md)
+    """
 
     __tablename__ = "farms"
     __table_args__ = (
@@ -75,7 +93,11 @@ class Farm(TimestampMixin, Base):
 
 
 class Room(TimestampMixin, Base):
-    """독립 제어 단위인 재배실."""
+    """
+    독립 제어 단위인 재배실.
+
+    센서·액추에이터·FarmState·ControlRule 이 여기에 달린다.
+    """
 
     __tablename__ = "rooms"
     __table_args__ = (
@@ -104,7 +126,11 @@ class Room(TimestampMixin, Base):
 
 
 class Rack(TimestampMixin, Base):
-    """재배 랙. 3D 씬의 랙 골격과 대응한다."""
+    """
+    재배 랙.
+
+    position_* 는 룸 로컬 좌표(선택). 1단계 GrowingRoomScene 랙과 맞춤.
+    """
 
     __tablename__ = "racks"
     __table_args__ = (

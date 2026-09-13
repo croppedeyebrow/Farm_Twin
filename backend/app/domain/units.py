@@ -1,8 +1,16 @@
 """
-센서 타입 ↔ 기본 단위 매핑 (2단계 Day 4).
+센서 타입 ↔ 기본 단위·물리 범위 (2단계 Day 4).
 
-정규화 파이프라인(6단계)과 seed/API 가 같은 기준을 쓰도록
-도메인 계층에 고정한다.
+왜 도메인에 두나
+----------------
+정규화 파이프라인(6단계), seed, API 스키마, 시뮬레이터 clamp 가
+서로 다른 min/max·단위를 쓰면 재현성·품질 판정이 깨진다.
+그래서 ORM 밖에서 상수로 고정한다.
+
+포함
+----
+- SENSOR_DEFAULT_UNIT: 타입별 정규화 저장 단위
+- SENSOR_VALUE_RANGE: MVP clamp / quality 판정용 inclusive 범위
 """
 
 from app.domain.enums import SensorType, Unit

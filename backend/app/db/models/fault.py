@@ -1,8 +1,13 @@
 """
 센서 고장 주입 정의·이력 (2단계 Day 6).
 
-원시 sensor_readings 는 덮어쓰지 않는다.
-주입은 측정 생성 경로에서 적용되고, 이 테이블은 시작·해제 이력을 남긴다.
+원칙
+----
+원시 sensor_readings 행은 덮어쓰지 않는다.
+주입은 **측정 생성 경로**에서 적용하고, 이 테이블은 시작·해제 이력만 남긴다.
+
+active=True 이고 end_simulation_time 이 null 이면 진행 중.
+해제 시 end_simulation_time / cleared_at 을 채우고 active=False.
 """
 
 from __future__ import annotations
