@@ -32,5 +32,6 @@ DB commit **성공 전** 에 push 하지 않는다.
 Day 17 과의 경계
 ----------------
 Day 16: 서버 manager + envelope + commit-then-push
-Day 17: REST snapshot + 재연결·백오프 + sequence 누락 복구 (클라/프로토콜)
+Day 17: REST snapshot(stream_sequence) + 클라 재연결·백오프 + sequence 갭 시 snapshot 복구
+        (서버 replay 버퍼 없음 — 누락은 REST 로 latest 재정렬)
 """

@@ -1,12 +1,19 @@
 """
-Farm 조회·스냅샷 애플리케이션 서비스 (2단계 Day 7).
+Farm 조회·스냅샷 애플리케이션 서비스 (2단계 Day 7, 5단계 Day 17).
 
 계층
 ----
 routers → **services** → ORM/SQLAlchemy → PostgreSQL
+                    └→ ConnectionManager.last_sequence (Day 17 stream 정렬)
 
 라우터는 HTTP 만 담당하고, 조회 조합·404 정책은 여기에 둔다.
 시뮬레이터(3단계+)도 같은 세션/모델 계약을 재사용할 수 있다.
+
+Day 17
+------
+snapshot 에 stream_sequence 를 실어
+  초기 로딩 / 재연결 / sequence 갭 복구
+시 클라이언트가 REST 한 번으로 상태+스트림 기준을 맞추게 한다.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ from app.schemas.farm import (
     SensorReadingOut,
     SensorSummary,
 )
+from app.websocket.manager import get_connection_manager
 
 
 async def list_farms(session: AsyncSession) -> list[FarmSummary]:
@@ -46,10 +54,13 @@ async def get_farm_or_404(session: AsyncSession, farm_id: uuid.UUID) -> Farm:
 
 async def get_farm_snapshot(session: AsyncSession, farm_id: uuid.UUID) -> FarmSnapshot:
     """
-    관제 초기 로딩용 통합 스냅샷.
+    관제 초기·복구용 통합 스냅샷.
 
     MVP 는 farm 당 room 1개를 가정한다 (seed 기준).
     이후 다룸이면 room_id 쿼리 파라미터가 필요하다.
+
+    stream_sequence 는 DB 가 아니라 이 프로세스 ConnectionManager 기준이다.
+    WS 가 아직 한 번도 publish 하지 않았으면 0.
     """
     farm = await get_farm_or_404(session, farm_id)
     room = await session.scalar(select(Room).where(Room.farm_id == farm_id).limit(1))
@@ -74,6 +85,9 @@ async def get_farm_snapshot(session: AsyncSession, farm_id: uuid.UUID) -> FarmSn
     # room 당 최신 참값 1행
     state = await session.scalar(select(FarmState).where(FarmState.room_id == room.id))
 
+    # Day 17: 관제 스트림 정렬 기준 (commit-then-push 로 발급된 마지막 번호)
+    stream_sequence = get_connection_manager().last_sequence(farm_id)
+
     return FarmSnapshot(
         farm=FarmSummary.model_validate(farm),
         room=RoomSummary.model_validate(room),
@@ -81,6 +95,7 @@ async def get_farm_snapshot(session: AsyncSession, farm_id: uuid.UUID) -> FarmSn
         sensors=[SensorSummary.model_validate(sensor) for sensor in sensors],
         actuators=[ActuatorSummary.model_validate(actuator) for actuator in actuators],
         state=FarmStateOut.model_validate(state) if state else None,
+        stream_sequence=stream_sequence,
     )
 
 

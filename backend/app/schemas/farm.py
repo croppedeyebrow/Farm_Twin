@@ -127,9 +127,18 @@ class SensorReadingOut(BaseModel):
 
 class FarmSnapshot(BaseModel):
     """
-    관제 초기 로딩용 통합 스냅샷.
+    관제 초기·복구용 통합 스냅샷 (2단계 Day 7, 5단계 Day 17 확장).
 
-    REST 로 한 번에 메타+참값을 받고, 이후 증분은 WebSocket(5단계)으로 간다.
+    REST 로 메타+참값을 한 번에 받고, 이후 증분은 WebSocket 으로 간다.
+
+    stream_sequence (Day 17)
+    ------------------------
+    이 API 프로세스가 해당 farm 에 대해 **이미 발급한** WS sequence.
+    클라이언트는 snapshot 적용 후 `last_sequence = stream_sequence` 로 맞추고,
+    다음 본 이벤트는 stream_sequence+1 을 기대한다.
+
+    주의: ConnectionManager 는 프로세스 메모리다 (단일 워커 MVP).
+    멀티 인스턴스면 공유 저장소로 옮겨야 한다.
     """
 
     farm: FarmSummary
@@ -138,3 +147,5 @@ class FarmSnapshot(BaseModel):
     sensors: list[SensorSummary]
     actuators: list[ActuatorSummary]
     state: FarmStateOut | None
+    # Day 17: WS 스트림 정렬용 (없으면 클라가 connection.ready 만으로도 동작 가능)
+    stream_sequence: int = 0
