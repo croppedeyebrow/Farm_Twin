@@ -1,29 +1,19 @@
 /**
- * 관제 세션 오케스트레이터 (5단계 Day 17).
+ * 관제 세션 오케스트레이터 (5단계 Day 17~18).
  *
  * =============================================================================
  * 부트 플로우
  * -----------------------------------------------------------------------------
- * 1) REST snapshot 적용 (상태 + stream_sequence)
- * 2) WebSocket 연결
- * 3) connection.ready → lastSequence 재확인
- * 4) 본 이벤트 → sequence 판정
- *      apply     → store 증분
- *      duplicate → 무시
- *      gap       → stale + snapshot 재조회 + (소켓은 유지, 기준만 재설정)
+ * 1) REST snapshot 적용 (상태 + stream_sequence + sensors/actuators)
+ * 2) REST events → 타임라인 (Day 18)
+ * 3) WebSocket 연결
+ * 4) connection.ready → lastSequence 재확인
+ * 5) 본 이벤트 → sequence 판정 + KPI ring / 로컬 타임라인
  *
- * 재연결
- * ------
- * 소켓 onclose → FarmRealtimeSocket 이 backoff 재연결.
- * 다시 open 되면 connection.ready 가 오고, 필요 시 snapshot 을 다시 맞춘다.
- * (단절 동안 놓친 이벤트는 서버 replay 가 없으므로 snapshot 이 권위)
- *
- * 새로고침
- * --------
- * 페이지 로드 = 위 부트 플로우와 동일 → Day 17 테스트 "브라우저 새로고침 복구".
+ * 재연결·갭: snapshot(+events) 재조회로 latest 정렬.
  */
 
-import { fetchFarmSnapshot } from '../api/farms'
+import { fetchFarmEvents, fetchFarmSnapshot } from '../api/farms'
 import { FarmRealtimeSocket, type SocketStatus } from './farmSocket'
 import type { EventEnvelope } from './envelope'
 import {
@@ -37,6 +27,16 @@ let activeFarmId: string | null = null
 /** 갭 복구 중 중복 snapshot 요청 방지 */
 let recovering = false
 
+async function reloadControlEvents(): Promise<void> {
+  if (!activeFarmId) return
+  try {
+    const events = await fetchFarmEvents(activeFarmId, 50)
+    useRealtimeStore.getState().setControlEvents(events)
+  } catch {
+    // 타임라인은 보조 — 실패해도 세션을 깨지 않는다
+  }
+}
+
 async function reloadSnapshot(reason: string): Promise<void> {
   if (!activeFarmId || recovering) return
   recovering = true
@@ -46,6 +46,7 @@ async function reloadSnapshot(reason: string): Promise<void> {
   try {
     const snapshot = await fetchFarmSnapshot(activeFarmId)
     useRealtimeStore.getState().applySnapshot(snapshot)
+    await reloadControlEvents()
   } catch (error) {
     const message =
       error instanceof Error ? error.message : `snapshot failed (${reason})`
@@ -65,7 +66,6 @@ function handleEnvelope(envelope: EventEnvelope): void {
         ? envelope.payload.last_sequence
         : envelope.sequence
     const decision = decideConnectionReady(last)
-    // ready: 서버 기준이 클라보다 앞서 있으면 snapshot 으로 맞춤
     if (decision.kind === 'ready' && decision.lastSequence > store.lastSequence) {
       void reloadSnapshot('connection.ready ahead')
       return
@@ -90,7 +90,6 @@ function handleEnvelope(envelope: EventEnvelope): void {
     return
   }
 
-  // apply
   if (envelope.event_type === 'farm_state.updated') {
     store.applyFarmStatePayload(envelope.payload, decision.nextLast)
     return
@@ -102,7 +101,6 @@ function handleEnvelope(envelope: EventEnvelope): void {
 
 function handleStatus(status: SocketStatus): void {
   useRealtimeStore.getState().setSocketStatus(status)
-  // 재연결 성공 직후 단절 구간 누락을 snapshot 으로 메운다
   if (status === 'connected' && activeFarmId) {
     void reloadSnapshot('ws reconnected')
   }

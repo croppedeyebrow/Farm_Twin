@@ -1,6 +1,8 @@
-/* 1단계 관제 셸 레이아웃.
- * viewport: 풀스크린 3D
- * overlay : 브랜드 + health 상태 (3D 위를 가리지 않도록 좌상단 좁은 패널)
+/* 관제 셸 레이아웃 (1단계 + 5단계 Day 18).
+ *
+ * viewport : 풀스크린 3D
+ * overlay  : 좌상단 연결/브랜드 (좁은 패널)
+ * dashboard: 우측 KPI·차트·상세·타임라인
  */
 
 .shell {
@@ -15,16 +17,19 @@
 }
 
 .overlay {
-  position: relative;
-  z-index: 1;
-  width: min(24rem, calc(100% - 2rem));
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: min(22rem, calc(100% - 2rem));
   margin: 1.25rem;
   padding: 1.25rem 1.35rem;
   color: #13241c;
-  /* 반투명 패널 — 뒤 3D가 비치도록 */
   background: color-mix(in srgb, #f3f7f4 88%, transparent);
   border: 1px solid color-mix(in srgb, #0f3d2e 18%, transparent);
   backdrop-filter: blur(8px);
+  max-height: calc(100vh - 2.5rem);
+  overflow: auto;
 }
 
 .brand-name {
@@ -86,10 +91,237 @@
   font-size: 0.82rem;
 }
 
-@media (max-width: 640px) {
+/* --- Day 18 dashboard ---------------------------------------------------- */
+
+.dashboard {
+  position: absolute;
+  z-index: 2;
+  top: 1.25rem;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  width: min(28rem, calc(100% - 2.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow: auto;
+  pointer-events: none;
+}
+
+.dashboard > * {
+  pointer-events: auto;
+  padding: 0.9rem 1rem;
+  color: #13241c;
+  background: color-mix(in srgb, #f3f7f4 90%, transparent);
+  border: 1px solid color-mix(in srgb, #0f3d2e 16%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.dashboard h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: #0f3d2e;
+}
+
+.dashboard h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #3d4a42;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.badge-warn {
+  font-size: 0.72rem;
+  color: #8b2e1a;
+  border: 1px solid #d7b0a4;
+  padding: 0.1rem 0.4rem;
+}
+
+.panel-empty {
+  margin: 0.35rem 0 0;
+  color: #6b756e;
+  font-size: 0.8rem;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.kpi-card {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.45rem 0.35rem;
+  background: color-mix(in srgb, #ffffff 55%, transparent);
+  border: 1px solid #d5ddd6;
+}
+
+.kpi-card span {
+  font-size: 0.7rem;
+  color: #5a655e;
+}
+
+.kpi-card strong {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-host {
+  width: 100%;
+  height: 11rem;
+}
+
+.metric-select {
+  font: inherit;
+  font-size: 0.78rem;
+  color: #13241c;
+  background: #f7faf7;
+  border: 1px solid #c9d4cc;
+  padding: 0.2rem 0.35rem;
+}
+
+.detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.entity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+  max-height: 7.5rem;
+  overflow: auto;
+}
+
+.entity-list button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.45rem;
+  color: #13241c;
+  background: #f7faf7;
+  border: 1px solid #c9d4cc;
+  cursor: pointer;
+}
+
+.entity-list button.is-selected {
+  border-color: #0f3d2e;
+  background: color-mix(in srgb, #0f3d2e 10%, #f7faf7);
+}
+
+.entity-list em {
+  font-style: normal;
+  color: #5a655e;
+}
+
+.detail-dl {
+  margin: 0.55rem 0 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.detail-dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.detail-dl dt {
+  color: #5a655e;
+}
+
+.detail-dl dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.timeline-list li {
+  padding: 0.4rem 0.45rem;
+  border-left: 3px solid #9aab9f;
+  background: color-mix(in srgb, #ffffff 45%, transparent);
+}
+
+.timeline-list li[data-kind='control'] {
+  border-left-color: #0f3d2e;
+}
+
+.timeline-list li[data-kind='simulation'] {
+  border-left-color: #2a6f97;
+}
+
+.timeline-list li[data-kind='state'] {
+  border-left-color: #b08900;
+}
+
+.timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.timeline-head span {
+  color: #5a655e;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-list p {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: #3d4a42;
+}
+
+@media (max-width: 960px) {
   .overlay {
     width: calc(100% - 1.5rem);
+    max-height: none;
+    position: relative;
     margin: 0.75rem;
-    padding: 1rem;
+  }
+
+  .dashboard {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: calc(100% - 1.5rem);
+    margin: 0 0.75rem 0.75rem;
+    max-height: none;
+  }
+
+  .viewport {
+    position: relative;
+    min-height: 40vh;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

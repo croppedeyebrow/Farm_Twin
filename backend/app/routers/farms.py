@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.farm import (
     ActuatorSummary,
+    ControlEventOut,
     FarmSnapshot,
     FarmStateOut,
     FarmSummary,
@@ -77,6 +78,20 @@ async def list_farm_actuators(
 ) -> list[ActuatorSummary]:
     """농장 액추에이터 목록."""
     return await farm_service.list_farm_actuators(session, farm_id)
+
+
+@router.get("/farms/{farm_id}/events", response_model=list[ControlEventOut])
+async def list_farm_events(
+    farm_id: uuid.UUID,
+    session: DbSession,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[ControlEventOut]:
+    """
+    제어 이벤트 타임라인 (5단계 Day 18).
+
+    최신 recorded_at 순. 관제 UI EventTimeline 이 REST 로 이력을 채운다.
+    """
+    return await farm_service.list_farm_control_events(session, farm_id, limit=limit)
 
 
 @router.get("/sensors/{sensor_id}/readings", response_model=list[SensorReadingOut])

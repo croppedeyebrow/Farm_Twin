@@ -1,5 +1,5 @@
 /**
- * Farm REST API 클라이언트 (5단계 Day 17).
+ * Farm REST 확장 (5단계 Day 17 snapshot + Day 18 events).
  *
  * 경로
  * ----
@@ -7,10 +7,8 @@
  * - Vite: proxy 가 `/api` strip → FastAPI `/farms/...`
  * - Compose: Nginx `/api/` strip → 동일
  *
- * Day 17 역할
- * -----------
- * 초기 로딩·재연결·sequence 갭 복구의 **권위 있는 상태**는 항상 REST snapshot.
- * WebSocket 은 그 이후 증분만 적용한다.
+ * Day 17: snapshot 이 권위 있는 상태
+ * Day 18: events 로 제어 타임라인 이력 채움
  */
 
 export type FarmStateSnapshot = {
@@ -27,22 +25,50 @@ export type FarmStateSnapshot = {
   updated_at: string
 }
 
+export type SensorSummary = {
+  id: string
+  room_id: string
+  rack_id: string | null
+  code: string
+  name: string
+  sensor_type: string
+  unit: string
+  model_version: string
+}
+
+export type ActuatorSummary = {
+  id: string
+  code: string
+  name: string
+  actuator_type: string
+  mode: string
+  output_ratio: number
+}
+
 export type FarmSnapshot = {
   farm: { id: string; site_id: string; code: string; name: string }
   room: { id: string; farm_id: string; code: string; name: string }
   racks: unknown[]
-  sensors: unknown[]
-  actuators: Array<{
-    id: string
-    code: string
-    name: string
-    actuator_type: string
-    mode: string
-    output_ratio: number
-  }>
+  sensors: SensorSummary[]
+  actuators: ActuatorSummary[]
   state: FarmStateSnapshot | null
   /** Day 17: 이 API 프로세스가 발급한 마지막 WS sequence */
   stream_sequence: number
+}
+
+export type ControlEventOut = {
+  id: string
+  event_type: string
+  message: string | null
+  actual_output_ratio: number | null
+  simulation_time: number
+  recorded_at: string
+  command_id: string
+  simulation_run_id: string
+  actuator_code: string | null
+  actuator_type: string | null
+  desired_mode: string | null
+  command_status: string | null
 }
 
 /**
@@ -56,4 +82,20 @@ export async function fetchFarmSnapshot(farmId: string): Promise<FarmSnapshot> {
     throw new Error(`snapshot ${response.status}`)
   }
   return (await response.json()) as FarmSnapshot
+}
+
+/**
+ * GET /api/farms/{farmId}/events?limit=
+ *
+ * 제어 Command/Event append-only 이력 (최신순).
+ */
+export async function fetchFarmEvents(
+  farmId: string,
+  limit = 50,
+): Promise<ControlEventOut[]> {
+  const response = await fetch(`/api/farms/${farmId}/events?limit=${limit}`)
+  if (!response.ok) {
+    throw new Error(`events ${response.status}`)
+  }
+  return (await response.json()) as ControlEventOut[]
 }

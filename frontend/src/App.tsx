@@ -1,14 +1,23 @@
 /**
- * 관제 셸 (1단계 health + 3단계 3D + 5단계 Day 17 실시간).
+ * 관제 셸 (1단계~5단계 Day 18).
  *
- * Day 17
+ * 레이아웃
+ * --------
+ * - 풀블리드 3D viewport
+ * - 좌측 overlay: 브랜드 + 연결 상태
+ * - 우측 dashboard: KPI · 시계열 · 상세 · 이벤트 타임라인 (Day 18)
+ *
+ * 데이터
  * ------
- * - 부트: REST snapshot → WS 연결
- * - 오버레이: health + WS 연결상태 + sequence + stale + 참값 온도
- * - 재연결·갭 복구는 realtime/session 이 담당
+ * Day 17 session 이 snapshot+WS 를 유지하고,
+ * Day 18 컴포넌트는 store 만 구독한다 (직접 fetch 금지).
  */
 import { useEffect, useState } from 'react'
 import './App.css'
+import { DetailPanel } from './components/DetailPanel'
+import { EventTimeline } from './components/EventTimeline'
+import { KpiStrip } from './components/KpiStrip'
+import { TimeSeriesChart } from './components/TimeSeriesChart'
 import { DEMO_FARM_ID } from './config'
 import {
   startFarmRealtimeSession,
@@ -30,11 +39,18 @@ function App() {
   const stale = useRealtimeStore((s) => s.stale)
   const recovering = useRealtimeStore((s) => s.recovering)
   const state = useRealtimeStore((s) => s.state)
+  const sensors = useRealtimeStore((s) => s.sensors)
+  const actuators = useRealtimeStore((s) => s.actuators)
+  const kpiHistory = useRealtimeStore((s) => s.kpiHistory)
+  const timeline = useRealtimeStore((s) => s.timeline)
+  const selectedSensorId = useRealtimeStore((s) => s.selectedSensorId)
+  const selectedActuatorId = useRealtimeStore((s) => s.selectedActuatorId)
   const simulationStatus = useRealtimeStore((s) => s.simulationStatus)
   const realtimeError = useRealtimeStore((s) => s.lastError)
+  const selectSensor = useRealtimeStore((s) => s.selectSensor)
+  const selectActuator = useRealtimeStore((s) => s.selectActuator)
 
   useEffect(() => {
-    // StrictMode 더블 마운트 / 언마운트 시 늦은 응답이 state 를 덮어쓰지 않게 한다.
     let cancelled = false
 
     async function checkApi() {
@@ -82,7 +98,7 @@ function App() {
 
   return (
     <main className="shell">
-      <div className="viewport" aria-label="빈 3D 재배실">
+      <div className="viewport" aria-label="3D 재배실">
         <GrowingRoomScene />
       </div>
 
@@ -90,7 +106,7 @@ function App() {
         <p className="brand-name">FarmTwin</p>
         <h1>실내 스마트팜 운영 트윈</h1>
         <p className="lede">
-          REST snapshot + WebSocket 증분 — 단절·sequence 갭 시 snapshot 으로 복구합니다.
+          KPI·차트·상세·타임라인 — snapshot + WebSocket 동일 소스로 갱신합니다.
         </p>
 
         <section className="status" aria-live="polite">
@@ -118,12 +134,6 @@ function App() {
               {recovering ? '복구 중' : stale ? 'stale' : '최신'}
             </strong>
           </div>
-          {state ? (
-            <div className="status-row">
-              <span>온도 (참값)</span>
-              <strong>{state.temperature_c.toFixed(1)} °C</strong>
-            </div>
-          ) : null}
           {simulationStatus ? (
             <div className="status-row">
               <span>Run</span>
@@ -134,6 +144,20 @@ function App() {
           {realtimeError ? <p className="error">{realtimeError}</p> : null}
         </section>
       </header>
+
+      <aside className="dashboard" aria-label="관제 대시보드">
+        <KpiStrip state={state} stale={stale} />
+        <TimeSeriesChart history={kpiHistory} />
+        <DetailPanel
+          sensors={sensors}
+          actuators={actuators}
+          selectedSensorId={selectedSensorId}
+          selectedActuatorId={selectedActuatorId}
+          onSelectSensor={selectSensor}
+          onSelectActuator={selectActuator}
+        />
+        <EventTimeline entries={timeline} />
+      </aside>
     </main>
   )
 }

@@ -149,3 +149,27 @@ class FarmSnapshot(BaseModel):
     state: FarmStateOut | None
     # Day 17: WS 스트림 정렬용 (없으면 클라가 connection.ready 만으로도 동작 가능)
     stream_sequence: int = 0
+
+
+class ControlEventOut(BaseModel):
+    """
+    관제 이벤트 타임라인 한 줄 (5단계 Day 18).
+
+    ControlEvent(결과) + Command/Actuator 요약.
+    Command 행을 덮어쓰지 않는 append-only 이력을 UI 가 읽기 좋게 투영한다.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event_type: str
+    message: str | None = None
+    actual_output_ratio: float | None = None
+    simulation_time: float
+    recorded_at: datetime
+    command_id: uuid.UUID
+    simulation_run_id: uuid.UUID
+    actuator_code: str | None = None
+    actuator_type: str | None = None
+    desired_mode: str | None = None
+    command_status: str | None = None

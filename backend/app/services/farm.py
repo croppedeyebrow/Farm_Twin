@@ -1,5 +1,6 @@
 """
-Farm 조회·스냅샷 애플리케이션 서비스 (2단계 Day 7, 5단계 Day 17).
+Farm 조회·스냅샷·이벤트 애플리케이션 서비스
+(2단계 Day 7, 5단계 Day 17~18).
 
 계층
 ----
@@ -14,6 +15,10 @@ Day 17
 snapshot 에 stream_sequence 를 실어
   초기 로딩 / 재연결 / sequence 갭 복구
 시 클라이언트가 REST 한 번으로 상태+스트림 기준을 맞추게 한다.
+
+Day 18
+------
+list_farm_control_events: 관제 타임라인용 ControlEvent 이력.
 """
 
 from __future__ import annotations
@@ -25,8 +30,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Actuator, Farm, FarmState, Rack, Room, Sensor, SensorReading
+from app.db.models.control import ControlCommand, ControlEvent
+from app.db.models.simulation import SimulationRun
 from app.schemas.farm import (
     ActuatorSummary,
+    ControlEventOut,
     FarmSnapshot,
     FarmStateOut,
     FarmSummary,
@@ -170,3 +178,49 @@ async def list_farm_actuators(
         )
     ).all()
     return [ActuatorSummary.model_validate(item) for item in actuators]
+
+
+async def list_farm_control_events(
+    session: AsyncSession,
+    farm_id: uuid.UUID,
+    *,
+    limit: int = 50,
+) -> list[ControlEventOut]:
+    """
+    농장 제어 이벤트 타임라인 (5단계 Day 18).
+
+    ControlEvent ← Command ← Actuator, SimulationRun.farm_id 로 필터.
+    최신 recorded_at 우선. 시드에 이벤트가 없으면 빈 목록 (정상).
+    """
+    await get_farm_or_404(session, farm_id)
+    rows = (
+        await session.execute(
+            select(ControlEvent, ControlCommand, Actuator)
+            .join(ControlCommand, ControlEvent.command_id == ControlCommand.id)
+            .join(Actuator, ControlCommand.actuator_id == Actuator.id)
+            .join(SimulationRun, ControlEvent.simulation_run_id == SimulationRun.id)
+            .where(SimulationRun.farm_id == farm_id)
+            .order_by(ControlEvent.recorded_at.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    out: list[ControlEventOut] = []
+    for event, command, actuator in rows:
+        out.append(
+            ControlEventOut(
+                id=event.id,
+                event_type=event.event_type.value,
+                message=event.message,
+                actual_output_ratio=event.actual_output_ratio,
+                simulation_time=event.simulation_time,
+                recorded_at=event.recorded_at,
+                command_id=event.command_id,
+                simulation_run_id=event.simulation_run_id,
+                actuator_code=actuator.code,
+                actuator_type=actuator.actuator_type.value,
+                desired_mode=command.desired_mode.value,
+                command_status=command.status.value,
+            )
+        )
+    return out
