@@ -8,6 +8,7 @@ FarmTwin API 엔트리포인트 (1단계 Day 2~3, 2단계 Day 7 라우터 연결
 - WebSocket 라우팅 검증용 `/ws/health` 골격
 - Day 7: farms snapshot/state/sensors/actuators/readings 라우터 등록
 - Day 11: simulations start/pause/resume/stop/step 라우터 등록
+- Day 16: `/ws/farms/{id}` 실시간 envelope push
 
 설계 배경
 --------
@@ -25,6 +26,7 @@ from sqlalchemy import text
 
 from app.db.session import engine
 from app.routers import farms_router, simulations_router
+from app.websocket.routes import router as websocket_router
 
 app = FastAPI(
     title="FarmTwin API",
@@ -52,6 +54,8 @@ app.add_middleware(
 app.include_router(farms_router)
 # Day 11: 시뮬레이션 run 제어·스텝
 app.include_router(simulations_router)
+# Day 16: 농장 실시간 WebSocket (/ws/farms/{id}, envelope push)
+app.include_router(websocket_router)
 
 
 @app.get("/")
@@ -97,8 +101,8 @@ async def ws_health(websocket: WebSocket) -> None:
     """
     WebSocket 라우팅 골격 검증용 엔드포인트 (1단계 Day 3).
 
-    실제 농장 스트림(`/ws/farms/{id}`)은 이후 단계에서 구현한다.
-    지금은 Nginx `/ws/` Upgrade 헤더 전달이 동작하는지 확인하는 용도.
+    농장 스트림은 `/ws/farms/{id}` (Day 16).
+    여기는 Nginx `/ws/` Upgrade 헤더 전달 확인용으로 유지한다.
     """
     await websocket.accept()
     await websocket.send_json({"status": "ok"})

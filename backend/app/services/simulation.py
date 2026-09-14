@@ -28,14 +28,19 @@ domain/simulation/*     → 순수 계산 (시계·외기·환경·센서)
 step 은 RUNNING 에서만 허용 (pause = 가상 시계 정지와 동일 효과).
 
 =============================================================================
-폐쇄 루프에서 Day 11 범위
+폐쇄 루프에서 Day 11 + Day 16
 -----------------------------------------------------------------------------
 백엔드 설계 6절 순서 중:
   1 외기·FarmState 로드
   2 액추에이터 상태 반영
   3 다음 FarmState 계산
-  4 가상 센서 측정 + commit
-규칙/명령/이벤트(5~9)는 4단계.
+  4 가상 센서 측정
+  …
+  10 DB commit **성공 후** 실시간 이벤트 발행 (websocket.publisher)
+
+규칙/명령/이벤트(5~9)는 4단계 도메인.
+발행은 이 서비스의 commit 직후에만 호출한다 (commit 전 push 금지).
+push 실패는 publisher 가 삼키므로 API 응답·DB 상태는 유지된다.
 """
 
 from __future__ import annotations
@@ -64,6 +69,10 @@ from app.domain.simulation.state import (
 )
 from app.domain.simulation.weather import create_weather_adapter
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
+from app.websocket.publisher import (
+    publish_farm_state_updated,
+    publish_simulation_status,
+)
 
 # 허용 전이 집합 — 문서의 상태 기계와 1:1
 _ALLOWED_START = {
@@ -126,7 +135,10 @@ async def start_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOu
     run.ended_at = None
     await session.commit()
     await session.refresh(run)
-    return _to_out(run)
+    out = _to_out(run)
+    # Day 16: commit 확정 후에만 WS push (실패해도 HTTP/DB 결과는 유지)
+    await publish_simulation_status(out)
+    return out
 
 
 async def pause_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
@@ -145,7 +157,9 @@ async def pause_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOu
     run.status = SimulationStatus.PAUSED
     await session.commit()
     await session.refresh(run)
-    return _to_out(run)
+    out = _to_out(run)
+    await publish_simulation_status(out)  # Day 16 commit-then-push
+    return out
 
 
 async def resume_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
@@ -159,7 +173,9 @@ async def resume_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunO
     run.status = SimulationStatus.RUNNING
     await session.commit()
     await session.refresh(run)
-    return _to_out(run)
+    out = _to_out(run)
+    await publish_simulation_status(out)  # Day 16 commit-then-push
+    return out
 
 
 async def stop_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut:
@@ -174,7 +190,9 @@ async def stop_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut
     run.ended_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(run)
-    return _to_out(run)
+    out = _to_out(run)
+    await publish_simulation_status(out)  # Day 16 commit-then-push
+    return out
 
 
 def _environment_from_farm_state(state: FarmState) -> EnvironmentState:
@@ -418,7 +436,7 @@ async def step_run(
     await session.refresh(farm_state)
     await session.refresh(run)
 
-    return SimulationStepResult(
+    result = SimulationStepResult(
         run_id=run.id,
         status=run.status,
         steps_applied=steps,
@@ -432,3 +450,11 @@ async def step_run(
         substrate_moisture_pct=farm_state.substrate_moisture_pct,
         ppfd_umol=farm_state.ppfd_umol,
     )
+    # Day 16: DB 반영 확정 후에만 관제 스트림 push (farm_state.updated)
+    # 구독자 없거나 push 실패해도 result 는 그대로 반환한다.
+    await publish_farm_state_updated(
+        farm_id=run.farm_id,
+        room_id=run.room_id,
+        result=result,
+    )
+    return result
