@@ -1,49 +1,118 @@
 /**
- * 빈 3D 재배실 씬 (1단계 Day 3).
+ * 통합 3D 관제 씬 (5단계 Day 19).
  *
- * 설계 문서 원칙: 3D는 CAD가 아니라 상태 탐색 인터페이스다.
- * 1단계에서는 정밀 모델 대신 방 + 랙 골격만 두고,
- * 이후 단계에서 센서/액추에이터 상태 색을 얹는다.
+ * =============================================================================
+ * 구성
+ * -----------------------------------------------------------------------------
+ * - GrapeCorridor: 포도 터널 전경 (아치·봉지·캐노피)
+ * - StrawberryRack ×2: 딸기 수직 재배 + LED/관수
+ * - SensorMarkers: 참값 기반 색 + 클릭 선택
+ * - ActuatorVisuals: 팬 회전 · HVAC/제습 배지 · 관수 펄스
+ *
+ * store 구독으로 KPI/차트/상세와 동일 소스를 쓴다.
+ * 설계: 3D는 CAD가 아니라 상태 탐색 인터페이스.
  */
 import { OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { Rack } from './Rack'
-import { Room } from './Room'
 
-/** 재배실 안쪽에 나란히 배치한 랙 3개의 월드 좌표 (x, y, z). */
-const RACK_POSITIONS: [number, number, number][] = [
-  [-2.2, 0, -0.4],
-  [0, 0, -0.4],
-  [2.2, 0, -0.4],
+import { useRealtimeStore } from '../store/realtimeStore'
+import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
+import { GrapeCorridor } from './GrapeCorridor'
+import { Room } from './Room'
+import { SensorMarkers } from './SensorMarkers'
+import { StrawberryRack } from './StrawberryRack'
+import type { SensorMetricKey } from './statusColors'
+
+const STRAWBERRY_POSITIONS: Array<{
+  position: [number, number, number]
+  label: string
+}> = [
+  { position: [2.6, 0, -0.2], label: 'S1' },
+  { position: [4.0, 0, -0.2], label: 'S2' },
 ]
 
 export function GrowingRoomScene() {
+  const state = useRealtimeStore((s) => s.state)
+  const sensors = useRealtimeStore((s) => s.sensors)
+  const actuators = useRealtimeStore((s) => s.actuators)
+  const stale = useRealtimeStore((s) => s.stale)
+  const selectedSensorId = useRealtimeStore((s) => s.selectedSensorId)
+  const selectedActuatorId = useRealtimeStore((s) => s.selectedActuatorId)
+  const selectSensor = useRealtimeStore((s) => s.selectSensor)
+  const selectActuator = useRealtimeStore((s) => s.selectActuator)
+  const setChartMetric = useRealtimeStore((s) => s.setChartMetric)
+
+  const { led, irrigation } = actuatorRatios(actuators)
+
   return (
     <Canvas
-      // 대각선에서 방 전체를 보도록 초기 카메라 설정
-      camera={{ position: [5.5, 4.2, 6.5], fov: 42 }}
-      // 고해상도 디스플레이에서만 DPR 을 올려 성능/화질 타협
+      // 터널 입구에서 안쪽(+소실점)과 딸기 랙이 같이 보이게
+      camera={{ position: [3.8, 3.4, 7.2], fov: 40 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true }}
+      onPointerMissed={() => {
+        selectSensor(null)
+        selectActuator(null)
+      }}
     >
-      <color attach="background" args={['#d7e4db']} />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[6, 8, 4]} intensity={1.15} castShadow />
-      <hemisphereLight args={['#f3f7f4', '#7f9a88', 0.35]} />
+      <color attach="background" args={['#cfe0d4']} />
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[6, 9, 5]} intensity={1.05} castShadow />
+      <hemisphereLight args={['#f3f7f4', '#6b8f71', 0.4]} />
+      {/* LED 가동 시 보조 점광 */}
+      {led > 0 ? (
+        <pointLight
+          position={[3.2, 2.8, 0]}
+          intensity={led * 2.2}
+          color="#ffe066"
+          distance={8}
+        />
+      ) : null}
 
       <Room />
-      {RACK_POSITIONS.map((position, index) => (
-        <Rack key={position.join('-')} position={position} label={`R${index + 1}`} />
+      <GrapeCorridor />
+
+      {STRAWBERRY_POSITIONS.map((rack) => (
+        <StrawberryRack
+          key={rack.label}
+          position={rack.position}
+          label={rack.label}
+          ledRatio={led}
+          irrigating={irrigation > 0}
+          selected={false}
+          onSelect={() => {
+            const hit = actuators.find((a) => a.actuator_type === 'led')
+            if (hit) selectActuator(hit.id)
+          }}
+        />
       ))}
 
-      {/* 팬 금지·상하 각도 제한: 바닥 아래로 카메라가 파고들지 않게 */}
+      <SensorMarkers
+        sensors={sensors}
+        state={state}
+        stale={stale}
+        selectedSensorId={selectedSensorId}
+        onSelect={(sensorId, metricKey) => {
+          selectSensor(sensorId)
+          if (metricKey) {
+            setChartMetric(metricKey as SensorMetricKey)
+          }
+        }}
+      />
+
+      <ActuatorVisuals
+        actuators={actuators}
+        selectedActuatorId={selectedActuatorId}
+        onSelect={selectActuator}
+      />
+
       <OrbitControls
         makeDefault
-        target={[0, 1.2, 0]}
-        minPolarAngle={0.35}
-        maxPolarAngle={1.35}
+        target={[0.6, 1.3, -1.2]}
+        minPolarAngle={0.3}
+        maxPolarAngle={1.4}
         minDistance={4}
-        maxDistance={14}
+        maxDistance={16}
         enablePan={false}
       />
     </Canvas>

@@ -12,7 +12,7 @@
  * - kpiHistory: 참값 ring buffer → 시계열 차트
  * - sensors/actuators: 상세 패널 선택
  * - timeline: REST 제어 이벤트 + 로컬 스트림 이벤트
- * - selectedSensorId / selectedActuatorId: Day 19 3D 연동 준비
+ * - selectedSensorId / selectedActuatorId / chartMetric: Day 19 3D↔차트 연동
  */
 
 import { create } from 'zustand'
@@ -31,6 +31,7 @@ import {
   sampleFromState,
   type KpiSample,
 } from '../realtime/history'
+import type { SensorMetricKey } from '../scene/statusColors'
 
 /** 타임라인에 보이는 한 줄 (REST 또는 로컬 파생) */
 export type TimelineEntry = {
@@ -55,6 +56,8 @@ export type RealtimeStore = {
   timeline: TimelineEntry[]
   selectedSensorId: string | null
   selectedActuatorId: string | null
+  /** Day 19: 3D 센서 클릭 시 시계열 메트릭 */
+  chartMetric: SensorMetricKey
   simulationStatus: string | null
   lastError: string | null
   recovering: boolean
@@ -74,6 +77,7 @@ export type RealtimeStore = {
   setControlEvents: (events: ControlEventOut[]) => void
   selectSensor: (id: string | null) => void
   selectActuator: (id: string | null) => void
+  setChartMetric: (metric: SensorMetricKey) => void
   pushTimeline: (entry: TimelineEntry) => void
 }
 
@@ -126,6 +130,7 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
   timeline: [],
   selectedSensorId: null,
   selectedActuatorId: null,
+  chartMetric: 'temperature_c',
   simulationStatus: null,
   lastError: null,
   recovering: false,
@@ -139,6 +144,7 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
 
   selectSensor: (selectedSensorId) => set({ selectedSensorId }),
   selectActuator: (selectedActuatorId) => set({ selectedActuatorId }),
+  setChartMetric: (chartMetric) => set({ chartMetric }),
 
   pushTimeline: (entry) =>
     set((current) => ({

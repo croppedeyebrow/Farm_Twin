@@ -1,16 +1,16 @@
 /**
- * 관제 셸 (1단계~5단계 Day 18).
+ * 관제 셸 (1단계~5단계 Day 19).
  *
  * 레이아웃
  * --------
- * - 풀블리드 3D viewport
+ * - 풀블리드 3D: 포도 터널 + 딸기 랙 + 센서/설비 비주얼 (Day 19)
  * - 좌측 overlay: 브랜드 + 연결 상태
- * - 우측 dashboard: KPI · 시계열 · 상세 · 이벤트 타임라인 (Day 18)
+ * - 우측 dashboard: KPI · 시계열 · 상세 · 타임라인
  *
- * 데이터
- * ------
- * Day 17 session 이 snapshot+WS 를 유지하고,
- * Day 18 컴포넌트는 store 만 구독한다 (직접 fetch 금지).
+ * 연동
+ * ----
+ * 3D 센서 클릭 → selectSensor + chartMetric
+ * 상세 패널 센서 선택 → 동일 chartMetric
  */
 import { useEffect, useState } from 'react'
 import './App.css'
@@ -24,6 +24,7 @@ import {
   stopFarmRealtimeSession,
 } from './realtime/session'
 import { GrowingRoomScene } from './scene/GrowingRoomScene'
+import { sensorTypeToMetric } from './scene/statusColors'
 import { useRealtimeStore } from './store/realtimeStore'
 
 /** UI에 표시하는 health 조회 상태. */
@@ -49,6 +50,7 @@ function App() {
   const realtimeError = useRealtimeStore((s) => s.lastError)
   const selectSensor = useRealtimeStore((s) => s.selectSensor)
   const selectActuator = useRealtimeStore((s) => s.selectActuator)
+  const setChartMetric = useRealtimeStore((s) => s.setChartMetric)
 
   useEffect(() => {
     let cancelled = false
@@ -98,7 +100,7 @@ function App() {
 
   return (
     <main className="shell">
-      <div className="viewport" aria-label="3D 재배실">
+      <div className="viewport" aria-label="3D 재배실" data-testid="farm-3d-viewport">
         <GrowingRoomScene />
       </div>
 
@@ -106,7 +108,7 @@ function App() {
         <p className="brand-name">FarmTwin</p>
         <h1>실내 스마트팜 운영 트윈</h1>
         <p className="lede">
-          KPI·차트·상세·타임라인 — snapshot + WebSocket 동일 소스로 갱신합니다.
+          포도 터널·딸기 랙 — 3D 선택과 KPI·차트가 같은 상태를 봅니다.
         </p>
 
         <section className="status" aria-live="polite">
@@ -153,7 +155,15 @@ function App() {
           actuators={actuators}
           selectedSensorId={selectedSensorId}
           selectedActuatorId={selectedActuatorId}
-          onSelectSensor={selectSensor}
+          onSelectSensor={(id) => {
+            selectSensor(id)
+            if (id == null) return
+            const sensor = sensors.find((item) => item.id === id)
+            const metric = sensor
+              ? sensorTypeToMetric(sensor.sensor_type)
+              : null
+            if (metric) setChartMetric(metric)
+          }}
           onSelectActuator={selectActuator}
         />
         <EventTimeline entries={timeline} />
