@@ -72,6 +72,36 @@ compose.yaml  로컬 Docker Compose
 
 ## Quick Start
 
+### 로컬 개발 일괄 기동 (권장)
+
+Docker Desktop을 켠 뒤, 저장소 루트에서:
+
+```powershell
+# Windows
+.\scripts\dev-up.ps1
+```
+
+```bash
+# Linux / macOS / Git Bash
+chmod +x scripts/dev-up.sh scripts/dev-down.sh
+./scripts/dev-up.sh
+```
+
+동작: Compose **DB만** 기동 → migrate/seed → 호스트에서 API(`:8000`) + Vite(`:5173`) 실행.  
+브라우저: http://127.0.0.1:5173
+
+종료:
+
+```powershell
+.\scripts\dev-down.ps1
+```
+
+옵션:
+- `-SkipSeed` / `--skip-seed` — seed 생략
+- `-FullCompose` / `--full-compose` — db+api+frontend+nginx 전부 Compose (`http://127.0.0.1:8080`)
+
+### Compose 전체 스택
+
 ```bash
 cp .env.example .env
 docker compose up --build
@@ -86,9 +116,9 @@ docker compose up --build
 - API ready(Nginx): http://127.0.0.1:8080/api/health/ready
 - Farm snapshot: http://127.0.0.1:8080/api/farms/22222222-2222-2222-2222-222222222222/snapshot
 
-> Compose API 컨테이너는 migration 만 자동 실행한다. seed 는 호스트에서 `uv run python -m app.db.seed` 로 넣는다.
+> Compose API 컨테이너는 migration 만 자동 실행한다. seed 는 호스트에서 `uv run python -m app.db.seed` 로 넣는다. (`dev-up` 은 seed 까지 수행)
 
-### 로컬 개발 (Compose DB만)
+### 로컬 개발 (수동)
 
 ```bash
 docker compose up -d db
