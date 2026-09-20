@@ -1,41 +1,61 @@
 /**
- * 딸기 수직 랙 (5단계 Day 19).
+ * 딸기 현수 거터 열 — GLB 작물 + 수관/열매 디테일.
  *
- * 기존 Rack 골격을 확장: 선반 + 포트 + 잎/열매 포인트.
- * LED·관수 비주얼은 ActuatorVisuals 가 같은 위치에 올린다.
+ * 레퍼런스: docs/refs/strawberry-interior.png
+ * 에셋: public/models/strawberry.glb
  */
 
-import { SHELF_HEIGHTS } from './rackLayout'
+import { Suspense, useMemo } from 'react'
+import { DoubleSide } from 'three'
+
+import { StrawberryPlantModel } from './CropModel'
+import { GUTTER_HEIGHT, GUTTER_LENGTH } from './rackLayout'
 
 type StrawberryRackProps = {
   position: [number, number, number]
   label: string
-  /** LED 출력 0~1 — 선반 아래 emissive */
   ledRatio: number
-  /** 관수 중이면 물방울 표시 */
   irrigating: boolean
   selected?: boolean
   onSelect?: () => void
+  length?: number
 }
 
-function StrawberryPlant({
+/** GLB 사이 빈 구간을 채우는 보조 잎·꽃 (저폴리) */
+function FillerFoliage({
   position,
 }: {
   position: [number, number, number]
 }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.04, 0]}>
-        <cylinderGeometry args={[0.06, 0.05, 0.08, 8]} />
-        <meshStandardMaterial color="#868e96" />
+      <mesh position={[0.04, 0.05, 0.02]} rotation={[0.5, 0.3, 0.2]}>
+        <planeGeometry args={[0.11, 0.08]} />
+        <meshStandardMaterial color="#37b24d" side={DoubleSide} roughness={0.9} />
       </mesh>
-      <mesh position={[0, 0.12, 0]}>
-        <sphereGeometry args={[0.07, 8, 8]} />
-        <meshStandardMaterial color="#37b24d" />
+      <mesh position={[-0.05, 0.04, -0.03]} rotation={[0.3, -0.4, -0.15]}>
+        <planeGeometry args={[0.1, 0.07]} />
+        <meshStandardMaterial color="#2b8a3e" side={DoubleSide} roughness={0.9} />
       </mesh>
-      <mesh position={[0.05, 0.1, 0.04]}>
-        <sphereGeometry args={[0.025, 6, 6]} />
-        <meshStandardMaterial color="#f03e3e" />
+      <mesh position={[0.01, 0.09, 0]}>
+        <sphereGeometry args={[0.01, 5, 5]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+    </group>
+  )
+}
+
+function VHanger({ z, gutterY }: { z: number; gutterY: number }) {
+  const topY = gutterY + 1.55
+  return (
+    <group position={[0, 0, z]}>
+      <mesh position={[-0.12, (topY + gutterY) / 2, 0]} rotation={[0, 0, 0.18]}>
+        <cylinderGeometry args={[0.008, 0.008, topY - gutterY, 4]} />
+        <meshStandardMaterial color="#868e96" metalness={0.5} roughness={0.4} />
+      </mesh>
+      <mesh position={[0.12, (topY + gutterY) / 2, 0]} rotation={[0, 0, -0.18]}>
+        <cylinderGeometry args={[0.008, 0.008, topY - gutterY, 4]} />
+        <meshStandardMaterial color="#868e96" metalness={0.5} roughness={0.4} />
       </mesh>
     </group>
   )
@@ -48,7 +68,48 @@ export function StrawberryRack({
   irrigating,
   selected = false,
   onSelect,
+  length = GUTTER_LENGTH,
 }: StrawberryRackProps) {
+  const gutterY = GUTTER_HEIGHT
+
+  const plantSlots = useMemo(() => {
+    const items: Array<{
+      z: number
+      yaw: number
+      scale: number
+      side: number
+    }> = []
+    const start = -length / 2 + 0.35
+    const end = length / 2 - 0.35
+    let i = 0
+    for (let z = start; z <= end; z += 0.48) {
+      items.push({
+        z,
+        yaw: ((i * 47) % 360) * (Math.PI / 180),
+        scale: 1.05 + (i % 3) * 0.08,
+        side: i % 2 === 0 ? 0.02 : -0.02,
+      })
+      i += 1
+    }
+    return items
+  }, [length])
+
+  const fillers = useMemo(() => {
+    const zs: number[] = []
+    for (const slot of plantSlots) {
+      zs.push(slot.z + 0.22)
+    }
+    return zs.filter((z) => Math.abs(z) < length / 2 - 0.2)
+  }, [plantSlots, length])
+
+  const hangers = useMemo(() => {
+    const zs: number[] = []
+    for (let z = -length / 2 + 0.6; z <= length / 2 - 0.6; z += 1.8) {
+      zs.push(z)
+    }
+    return zs
+  }, [length])
+
   return (
     <group
       position={position}
@@ -57,69 +118,82 @@ export function StrawberryRack({
         onSelect?.()
       }}
     >
-      {/* 선택 하이라이트 바닥 */}
       {selected ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, -0.35]}>
-          <ringGeometry args={[0.55, 0.7, 24]} />
-          <meshBasicMaterial color="#228be6" transparent opacity={0.55} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[0.35, 0.48, 28]} />
+          <meshBasicMaterial color="#228be6" transparent opacity={0.5} />
         </mesh>
       ) : null}
 
-      {/* 기둥 */}
-      {(
-        [
-          [-0.7, 1.35, 0],
-          [0.7, 1.35, 0],
-          [-0.7, 1.35, -0.7],
-          [0.7, 1.35, -0.7],
-        ] as [number, number, number][]
-      ).map((pos) => (
-        <mesh key={`${label}-${pos.join(',')}`} position={pos}>
-          <boxGeometry args={[0.08, 2.7, 0.08]} />
-          <meshStandardMaterial color="#495057" />
-        </mesh>
+      <mesh position={[0, gutterY, 0]}>
+        <boxGeometry args={[0.32, 0.16, length]} />
+        <meshStandardMaterial color="#f1f3f5" roughness={0.65} />
+      </mesh>
+      <mesh position={[0, gutterY + 0.06, 0]}>
+        <boxGeometry args={[0.26, 0.05, length - 0.1]} />
+        <meshStandardMaterial color="#5c4033" roughness={0.9} />
+      </mesh>
+
+      <mesh position={[0, gutterY + 0.55, 0]}>
+        <boxGeometry args={[0.12, 0.04, length * 0.92]} />
+        <meshStandardMaterial
+          color="#fff9db"
+          emissive="#ffd43b"
+          emissiveIntensity={0.12 + ledRatio * 1.5}
+        />
+      </mesh>
+
+      {hangers.map((z) => (
+        <VHanger key={`${label}-h-${z}`} z={z} gutterY={gutterY} />
       ))}
 
-      {SHELF_HEIGHTS.map((height, shelfIndex) => (
-        <group key={`${label}-shelf-${height}`}>
-          <mesh position={[0, height, -0.35]}>
-            <boxGeometry args={[1.5, 0.06, 0.9]} />
-            <meshStandardMaterial color="#868e96" />
-          </mesh>
-          {/* LED 바 */}
-          <mesh position={[0, height + 0.28, -0.35]}>
-            <boxGeometry args={[1.35, 0.03, 0.08]} />
-            <meshStandardMaterial
-              color="#fff3bf"
-              emissive="#ffd43b"
-              emissiveIntensity={0.15 + ledRatio * 1.6}
-            />
-          </mesh>
-          {/* 딸기 포트 3개 */}
-          {[-0.45, 0, 0.45].map((x) => (
-            <StrawberryPlant
-              key={`${label}-p-${shelfIndex}-${x}`}
-              position={[x, height + 0.08, -0.35]}
-            />
-          ))}
-          {/* 관수 물방울 (가동 시만) */}
-          {irrigating
-            ? [-0.3, 0.3].map((x) => (
-                <mesh
-                  key={`${label}-drop-${shelfIndex}-${x}`}
-                  position={[x, height + 0.2, -0.2]}
-                >
-                  <sphereGeometry args={[0.025, 6, 6]} />
-                  <meshStandardMaterial
-                    color="#74c0fc"
-                    transparent
-                    opacity={0.75}
-                  />
-                </mesh>
-              ))
-            : null}
-        </group>
+      <Suspense fallback={null}>
+        {plantSlots.map((slot, i) => (
+          <StrawberryPlantModel
+            key={`${label}-crop-${i}`}
+            position={[slot.side, gutterY + 0.08, slot.z]}
+            rotation={[0, slot.yaw, 0]}
+            scale={slot.scale}
+          />
+        ))}
+      </Suspense>
+
+      {fillers.map((z, i) => (
+        <FillerFoliage
+          key={`${label}-fill-${i}`}
+          position={[0, gutterY + 0.1, z]}
+        />
       ))}
+
+      <mesh position={[0.1, gutterY - 0.14, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.08, 0.012, 6, 16, Math.PI]} />
+        <meshStandardMaterial color="#dee2e6" />
+      </mesh>
+      <mesh
+        position={[-0.02, gutterY - 0.18, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
+        <cylinderGeometry args={[0.012, 0.012, length * 0.9, 5]} />
+        <meshStandardMaterial color="#e9ecef" />
+      </mesh>
+
+      {irrigating
+        ? plantSlots
+            .filter((_, i) => i % 3 === 0)
+            .map((slot) => (
+              <mesh
+                key={`${label}-drop-${slot.z}`}
+                position={[0.08, gutterY - 0.22, slot.z]}
+              >
+                <sphereGeometry args={[0.02, 6, 6]} />
+                <meshStandardMaterial
+                  color="#74c0fc"
+                  transparent
+                  opacity={0.7}
+                />
+              </mesh>
+            ))
+        : null}
     </group>
   )
 }

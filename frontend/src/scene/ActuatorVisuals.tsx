@@ -85,14 +85,21 @@ export function ActuatorVisuals({
 
   return (
     <group>
+      {/* 박공 환기팬 위치 (외피 환기창 근처) */}
       <Fan
-        position={[-3.6, 2.4, -1.2]}
+        position={[-4.2, 3.6, -5.2]}
         speed={fan.ratio}
         selected={fan.id === selectedActuatorId}
         onSelect={() => fan.id && onSelect(fan.id)}
       />
       <Fan
-        position={[3.6, 2.4, -1.2]}
+        position={[0, 3.6, -5.2]}
+        speed={fan.ratio}
+        selected={fan.id === selectedActuatorId}
+        onSelect={() => fan.id && onSelect(fan.id)}
+      />
+      <Fan
+        position={[4.2, 3.6, -5.2]}
         speed={fan.ratio}
         selected={fan.id === selectedActuatorId}
         onSelect={() => fan.id && onSelect(fan.id)}
@@ -100,7 +107,7 @@ export function ActuatorVisuals({
 
       {/* HVAC 배지 */}
       <mesh
-        position={[-3.8, 1.2, 1.5]}
+        position={[-5.8, 1.2, 4.5]}
         onClick={(event) => {
           event.stopPropagation()
           if (hvac.id) onSelect(hvac.id)
@@ -116,7 +123,7 @@ export function ActuatorVisuals({
 
       {/* 제습기 배지 */}
       <mesh
-        position={[3.8, 1.2, 1.5]}
+        position={[5.8, 1.2, 4.5]}
         onClick={(event) => {
           event.stopPropagation()
           if (dehum.id) onSelect(dehum.id)
@@ -130,10 +137,10 @@ export function ActuatorVisuals({
         />
       </mesh>
 
-      {/* 관수 펄스 — 터널 토양 위 */}
+      {/* 관수 펄스 — 딸기 통로 바닥 */}
       {irrig.ratio > 0 ? (
         <mesh
-          position={[0, 0.08, -2]}
+          position={[1.15, 0.08, -1.5]}
           rotation={[-Math.PI / 2, 0, 0]}
           onClick={(event) => {
             event.stopPropagation()

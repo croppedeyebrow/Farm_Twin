@@ -25,7 +25,7 @@ type SensorMarkersProps = {
   onSelect: (sensorId: string, metricKey: string | null) => void
 }
 
-/** 센서 타입별 기본 월드 위치 (포도 터널 좌측 / 딸기 구역) */
+/** 센서 타입별 기본 월드 위치 (포도 베이 / 딸기 거터) */
 function positionForSensor(
   sensor: SensorSummary,
   index: number,
@@ -34,10 +34,11 @@ function positionForSensor(
     sensor.sensor_type === 'substrate_moisture' ||
     sensor.sensor_type === 'ppfd'
   ) {
-    return [2.4 + (index % 2) * 0.35, 1.2 + (index % 3) * 0.35, -0.8]
+    // 딸기 거터 높이 근처
+    return [1.0 + (index % 3) * 1.1, 1.25, -0.5 - (index % 4) * 0.8]
   }
-  // 환경 센서는 터널 입구 측면
-  return [-2.2, 1.4 + (index % 3) * 0.45, 0.6 - index * 0.15]
+  // 환경 센서 — 포도 베이 입구 측면
+  return [-3.6, 1.5 + (index % 3) * 0.4, 2.2 - index * 0.2]
 }
 
 function SensorMarker({

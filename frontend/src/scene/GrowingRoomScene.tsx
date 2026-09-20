@@ -1,35 +1,29 @@
 /**
- * 통합 3D 관제 씬 (5단계 Day 19).
+ * 통합 3D 관제 씬.
  *
  * =============================================================================
- * 구성
+ * 구성 (레퍼런스 반영)
  * -----------------------------------------------------------------------------
- * - GrapeCorridor: 포도 터널 전경 (아치·봉지·캐노피)
- * - StrawberryRack ×2: 딸기 수직 재배 + LED/관수
- * - SensorMarkers: 참값 기반 색 + 클릭 선택
- * - ActuatorVisuals: 팬 회전 · HVAC/제습 배지 · 관수 펄스
+ * - GreenhouseShell: 멀티스팬 아치 외피·골조·기초·천장 그리드
+ * - GrapeCorridor: 좌측 베이 포도 터널 (주간·결과모 + grape.glb)
+ * - StrawberryRack ×N: 현수 거터 + strawberry.glb
+ * - SensorMarkers / ActuatorVisuals
  *
- * store 구독으로 KPI/차트/상세와 동일 소스를 쓴다.
- * 설계: 3D는 CAD가 아니라 상태 탐색 인터페이스.
+ * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png
+ * 작물 GLB: public/models/strawberry.glb, grape.glb
  */
+
 import { OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 
 import { useRealtimeStore } from '../store/realtimeStore'
 import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
 import { GrapeCorridor } from './GrapeCorridor'
-import { Room } from './Room'
+import { GreenhouseShell } from './GreenhouseShell'
+import { STRAWBERRY_ROW_X } from './rackLayout'
 import { SensorMarkers } from './SensorMarkers'
 import { StrawberryRack } from './StrawberryRack'
 import type { SensorMetricKey } from './statusColors'
-
-const STRAWBERRY_POSITIONS: Array<{
-  position: [number, number, number]
-  label: string
-}> = [
-  { position: [2.6, 0, -0.2], label: 'S1' },
-  { position: [4.0, 0, -0.2], label: 'S2' },
-]
 
 export function GrowingRoomScene() {
   const state = useRealtimeStore((s) => s.state)
@@ -46,8 +40,8 @@ export function GrowingRoomScene() {
 
   return (
     <Canvas
-      // 터널 입구에서 안쪽(+소실점)과 딸기 랙이 같이 보이게
-      camera={{ position: [3.8, 3.4, 7.2], fov: 40 }}
+      // 딸기 통로 시점 (내부 레퍼런스와 비슷한 소실점)
+      camera={{ position: [0.15, 1.55, 6.8], fov: 42 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true }}
       onPointerMissed={() => {
@@ -55,28 +49,32 @@ export function GrowingRoomScene() {
         selectActuator(null)
       }}
     >
-      <color attach="background" args={['#cfe0d4']} />
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[6, 9, 5]} intensity={1.05} castShadow />
-      <hemisphereLight args={['#f3f7f4', '#6b8f71', 0.4]} />
-      {/* LED 가동 시 보조 점광 */}
+      <color attach="background" args={['#8ecae6']} />
+      <ambientLight intensity={0.72} />
+      <directionalLight position={[8, 12, 4]} intensity={1.15} castShadow />
+      <hemisphereLight args={['#eef6ff', '#c5d5c9', 0.55]} />
       {led > 0 ? (
         <pointLight
-          position={[3.2, 2.8, 0]}
-          intensity={led * 2.2}
+          position={[1.2, 2.6, 0]}
+          intensity={led * 2.0}
           color="#ffe066"
-          distance={8}
+          distance={10}
         />
       ) : null}
 
-      <Room />
-      <GrapeCorridor />
+      <GreenhouseShell />
 
-      {STRAWBERRY_POSITIONS.map((rack) => (
+      {/* 좌측 스팬: 포도 */}
+      <group position={[-4.0, 0, 0.4]}>
+        <GrapeCorridor />
+      </group>
+
+      {/* 중앙·우측: 딸기 현수 거터 열 */}
+      {STRAWBERRY_ROW_X.map((x, i) => (
         <StrawberryRack
-          key={rack.label}
-          position={rack.position}
-          label={rack.label}
+          key={`row-${i}`}
+          position={[x, 0, 0.2]}
+          label={`S${i + 1}`}
           ledRatio={led}
           irrigating={irrigation > 0}
           selected={false}
@@ -108,12 +106,12 @@ export function GrowingRoomScene() {
 
       <OrbitControls
         makeDefault
-        target={[0.6, 1.3, -1.2]}
-        minPolarAngle={0.3}
-        maxPolarAngle={1.4}
-        minDistance={4}
-        maxDistance={16}
-        enablePan={false}
+        target={[0.4, 1.1, -1.5]}
+        minPolarAngle={0.25}
+        maxPolarAngle={1.45}
+        minDistance={3.5}
+        maxDistance={22}
+        enablePan
       />
     </Canvas>
   )

@@ -76,8 +76,13 @@ compose.yaml  로컬 Docker Compose
 
 Docker Desktop을 켠 뒤, 저장소 루트에서:
 
+```bat
+:: Windows (탐색기 더블클릭 또는 cmd)
+scripts\dev-up.cmd
+```
+
 ```powershell
-# Windows
+# Windows PowerShell 직접 실행
 .\scripts\dev-up.ps1
 ```
 
@@ -92,13 +97,15 @@ chmod +x scripts/dev-up.sh scripts/dev-down.sh
 
 종료:
 
-```powershell
-.\scripts\dev-down.ps1
+```bat
+scripts\dev-down.cmd
 ```
 
-옵션:
+옵션 (cmd도 동일하게 전달):
 - `-SkipSeed` / `--skip-seed` — seed 생략
 - `-FullCompose` / `--full-compose` — db+api+frontend+nginx 전부 Compose (`http://127.0.0.1:8080`)
+
+예: `scripts\dev-up.cmd -SkipSeed`
 
 ### Compose 전체 스택
 
