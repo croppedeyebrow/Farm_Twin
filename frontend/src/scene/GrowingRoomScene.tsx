@@ -5,12 +5,12 @@
  * 구성 (레퍼런스 반영)
  * -----------------------------------------------------------------------------
  * - GreenhouseShell: 멀티스팬 아치 외피·골조·기초·천장 그리드
- * - GrapeCorridor: 좌측 베이 포도 터널 (주간·결과모 + grape.glb)
- * - StrawberryRack ×N: 현수 거터 + strawberry.glb
+ * - GrapeCorridor ×2: 좌측·중앙 포도
+ * - StrawberryRack ×4: 중앙~우측 딸기 (벽 안쪽)
  * - SensorMarkers / ActuatorVisuals
  *
- * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png
- * 작물 GLB: public/models/strawberry.glb, grape.glb
+ * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png, strawberry line.png
+ * 작물 GLB: public/models/strawberry-set.glb, grape.glb
  */
 
 import { OrbitControls } from '@react-three/drei'
@@ -20,7 +20,7 @@ import { useRealtimeStore } from '../store/realtimeStore'
 import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
 import { GrapeCorridor } from './GrapeCorridor'
 import { GreenhouseShell } from './GreenhouseShell'
-import { STRAWBERRY_ROW_X } from './rackLayout'
+import { GRAPE_CORRIDOR_PLACEMENTS, STRAWBERRY_ROW_X } from './rackLayout'
 import { SensorMarkers } from './SensorMarkers'
 import { StrawberryRack } from './StrawberryRack'
 import type { SensorMetricKey } from './statusColors'
@@ -49,10 +49,11 @@ export function GrowingRoomScene() {
         selectActuator(null)
       }}
     >
-      <color attach="background" args={['#8ecae6']} />
-      <ambientLight intensity={0.72} />
-      <directionalLight position={[8, 12, 4]} intensity={1.15} castShadow />
-      <hemisphereLight args={['#eef6ff', '#c5d5c9', 0.55]} />
+      <color attach="background" args={['#4d9fd6']} />
+      <fog attach="fog" args={['#8ecae6', 28, 55]} />
+      <ambientLight intensity={0.65} />
+      <directionalLight position={[10, 14, 6]} intensity={1.25} castShadow />
+      <hemisphereLight args={['#e8f4ff', '#c4b59a', 0.5]} />
       {led > 0 ? (
         <pointLight
           position={[1.2, 2.6, 0]}
@@ -64,16 +65,18 @@ export function GrowingRoomScene() {
 
       <GreenhouseShell />
 
-      {/* 좌측 스팬: 포도 */}
-      <group position={[-4.0, 0, 0.4]}>
-        <GrapeCorridor />
-      </group>
+      {/* 포도 — 좌측 스팬 + 중앙 공백 (주석: 포도 추가) */}
+      {GRAPE_CORRIDOR_PLACEMENTS.map((g) => (
+        <group key={g.label} position={g.position}>
+          <GrapeCorridor />
+        </group>
+      ))}
 
-      {/* 중앙·우측: 딸기 현수 거터 열 */}
+      {/* 딸기 — 중앙~우측, 벽 밖으로 안 나가게 (주석: 딸기 추가) */}
       {STRAWBERRY_ROW_X.map((x, i) => (
         <StrawberryRack
           key={`row-${i}`}
-          position={[x, 0, 0.2]}
+          position={[x, 0, 0]}
           label={`S${i + 1}`}
           ledRatio={led}
           irrigating={irrigation > 0}

@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { DetailPanel } from './components/DetailPanel'
+import { CropTunePanel } from './components/CropTunePanel'
 import { EventTimeline } from './components/EventTimeline'
 import { KpiStrip } from './components/KpiStrip'
 import { TimeSeriesChart } from './components/TimeSeriesChart'
@@ -102,6 +103,7 @@ function App() {
     <main className="shell">
       <div className="viewport" aria-label="3D 재배실" data-testid="farm-3d-viewport">
         <GrowingRoomScene />
+        <CropTunePanel />
       </div>
 
       <header className="overlay">

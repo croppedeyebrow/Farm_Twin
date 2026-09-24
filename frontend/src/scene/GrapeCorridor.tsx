@@ -8,24 +8,25 @@
 import { Suspense, useMemo } from 'react'
 import { DoubleSide } from 'three'
 
+import { useCropTuneStore } from '../store/cropTuneStore'
 import { GrapePlantModel } from './CropModel'
 
-const ARCH_COUNT = 8
-const ARCH_SPACING = 1.15
+const ARCH_COUNT = 6
+const ARCH_SPACING = 1.05
 
 function Hoop({ z }: { z: number }) {
   return (
     <group position={[0, 0, z]}>
-      <mesh position={[-1.55, 1.35, 0]}>
-        <boxGeometry args={[0.05, 2.7, 0.05]} />
+      <mesh position={[-1.35, 1.25, 0]}>
+        <boxGeometry args={[0.045, 2.5, 0.045]} />
         <meshStandardMaterial color="#6b7280" metalness={0.4} roughness={0.45} />
       </mesh>
-      <mesh position={[1.55, 1.35, 0]}>
-        <boxGeometry args={[0.05, 2.7, 0.05]} />
+      <mesh position={[1.35, 1.25, 0]}>
+        <boxGeometry args={[0.045, 2.5, 0.045]} />
         <meshStandardMaterial color="#6b7280" metalness={0.4} roughness={0.45} />
       </mesh>
-      <mesh position={[0, 2.72, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <boxGeometry args={[0.05, 3.15, 0.05]} />
+      <mesh position={[0, 2.52, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.045, 2.75, 0.045]} />
         <meshStandardMaterial color="#6b7280" metalness={0.4} roughness={0.45} />
       </mesh>
     </group>
@@ -133,12 +134,14 @@ function CanopyLeaf({
 }
 
 export function GrapeCorridor() {
+  const crop = useCropTuneStore((s) => s.grape)
+
   const vines = useMemo(() => {
     const items: Array<{ x: number; z: number; side: -1 | 1 }> = []
     for (let i = 0; i < ARCH_COUNT; i += 1) {
       const z = -i * ARCH_SPACING
-      items.push({ x: -1.2, z, side: -1 })
-      items.push({ x: 1.2, z, side: 1 })
+      items.push({ x: -1.05, z, side: -1 })
+      items.push({ x: 1.05, z, side: 1 })
     }
     return items
   }, [])
@@ -151,26 +154,25 @@ export function GrapeCorridor() {
     }> = []
     for (let i = 0; i < ARCH_COUNT; i += 1) {
       const z = -i * ARCH_SPACING
-      // 결과모에서 매달린 포도 작물 (좌·우, 앞뒤)
       items.push({
-        position: [-1.05, 1.15, z - 0.15],
+        position: [-0.95, 1.15, z - 0.12],
         rotation: [0.15, 0.4, 0.1],
-        scale: 1.25,
+        scale: 1.15,
       })
       items.push({
-        position: [-1.1, 1.35, z + 0.2],
+        position: [-0.98, 1.32, z + 0.15],
         rotation: [-0.1, -0.3, -0.05],
-        scale: 1.15,
+        scale: 1.05,
       })
       items.push({
-        position: [1.05, 1.15, z - 0.15],
+        position: [0.95, 1.15, z - 0.12],
         rotation: [0.15, -0.4, -0.1],
-        scale: 1.25,
+        scale: 1.15,
       })
       items.push({
-        position: [1.1, 1.35, z + 0.2],
+        position: [0.98, 1.32, z + 0.15],
         rotation: [-0.1, 0.35, 0.08],
-        scale: 1.15,
+        scale: 1.05,
       })
     }
     return items
@@ -180,37 +182,36 @@ export function GrapeCorridor() {
     const items: [number, number, number][] = []
     for (let i = 0; i < ARCH_COUNT; i += 1) {
       const z = -i * ARCH_SPACING
-      for (let x = -1.35; x <= 1.35; x += 0.4) {
-        if (Math.abs(x) < 0.45) continue
-        items.push([x, 2.25 + (Math.abs(x) % 0.15), z + (x > 0 ? 0.08 : -0.05)])
+      for (let x = -1.15; x <= 1.15; x += 0.4) {
+        if (Math.abs(x) < 0.4) continue
+        items.push([x, 2.15 + (Math.abs(x) % 0.12), z + (x > 0 ? 0.06 : -0.04)])
       }
     }
     return items
   }, [])
 
   return (
-    <group position={[0, 0, 1.2]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -4]} receiveShadow>
-        <planeGeometry args={[1.1, 10]} />
+    <group position={[0, 0, 0.6]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -2.8]} receiveShadow>
+        <planeGeometry args={[1.0, 7]} />
         <meshStandardMaterial color="#f1f3f5" />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-1.4, 0.02, -4]} receiveShadow>
-        <planeGeometry args={[1.6, 10]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-1.2, 0.02, -2.8]} receiveShadow>
+        <planeGeometry args={[1.35, 7]} />
         <meshStandardMaterial color="#5c4033" />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[1.4, 0.02, -4]} receiveShadow>
-        <planeGeometry args={[1.6, 10]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[1.2, 0.02, -2.8]} receiveShadow>
+        <planeGeometry args={[1.35, 7]} />
         <meshStandardMaterial color="#5c4033" />
       </mesh>
 
-      {/* 수평 와이어 (덕트 열) */}
-      {[-1.05, 1.05].map((x) => (
+      {[-0.95, 0.95].map((x) => (
         <mesh
           key={`wire-${x}`}
-          position={[x, 1.48, -4]}
+          position={[x, 1.45, -2.8]}
           rotation={[Math.PI / 2, 0, 0]}
         >
-          <cylinderGeometry args={[0.008, 0.008, 9.5, 5]} />
+          <cylinderGeometry args={[0.008, 0.008, 6.5, 5]} />
           <meshStandardMaterial color="#adb5bd" metalness={0.6} roughness={0.35} />
         </mesh>
       ))}
@@ -224,12 +225,16 @@ export function GrapeCorridor() {
       ))}
 
       <Suspense fallback={null}>
-        {grapeCrops.map((crop, index) => (
+        {grapeCrops.map((cropItem, index) => (
           <GrapePlantModel
             key={`grape-${index}`}
-            position={crop.position}
-            rotation={crop.rotation}
-            scale={crop.scale}
+            position={[
+              cropItem.position[0] + crop.offsetX,
+              cropItem.position[1] + crop.offsetY,
+              cropItem.position[2] + crop.offsetZ,
+            ]}
+            rotation={cropItem.rotation}
+            scale={cropItem.scale * crop.scale}
           />
         ))}
       </Suspense>

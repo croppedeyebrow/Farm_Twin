@@ -1,77 +1,156 @@
 /**
- * 다중 아치(멀티스팬) 온실 외피·골조·기초.
+ * 멀티스팬 비닐하우스 외피·골조·기초.
  *
  * 레퍼런스: docs/refs/greenhouse-exterior.jpg
- * - 고딕형 아치 지붕 × SPAN_COUNT
- * - 아연도금 파이프 골조 + 반투명 필름
+ * ---------------------------------------------------------------------------
+ * - 고딕 아치 지붕이 이어진 다중 스팬
+ * - 반투명 필름 너머로 보이는 파이프 골조 격자
+ * - 박공면 하부 불투명 백색 패널 + 꼭대기 사각 환기창
  * - 콘크리트 블록 기초 + 하단 검정 스커트
- * - 박공면 환기창 · 일부 불투명 백색 패널
- *
- * CAD 정밀 복제가 아니라 관제용 반복 모듈로 외관 인지도를 높인다.
+ * - 측벽은 수직 후 아치로 이어짐
  */
 
 import { useMemo } from 'react'
-import { DoubleSide } from 'three'
+import {
+  BufferGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
+} from 'three'
 
-/** 스팬(베이) 개수 — 사진의 연결된 아치 열 */
 export const SPAN_COUNT = 3
-/** 한 스팬 폭 (월드 유닛 ≈ m) */
-export const SPAN_WIDTH = 4.2
-/** 온실 길이 (Z) */
-export const HALL_DEPTH = 12
-/** 측벽 높이 (아치 시작점) */
-export const EAVES_HEIGHT = 2.55
-/** 아치 꼭대기 높이 */
-export const RIDGE_HEIGHT = 4.35
+export const SPAN_WIDTH = 4.4
+export const HALL_DEPTH = 14
+/** 측벽 수직부 높이 (아치 시작) */
+export const EAVES_HEIGHT = 2.85
+/** 아치 마루 높이 */
+export const RIDGE_HEIGHT = 4.55
 
-const HALL_WIDTH = SPAN_COUNT * SPAN_WIDTH
-const Z0 = -HALL_DEPTH / 2 + 0.6
-const Z1 = HALL_DEPTH / 2 + 0.6
+export const HALL_WIDTH = SPAN_COUNT * SPAN_WIDTH
+export const HALL_Z0 = -HALL_DEPTH / 2 + 0.4
+export const HALL_Z1 = HALL_DEPTH / 2 + 0.4
 
-const FRAME = '#8a939c'
-const FRAME_DARK = '#6b737c'
-const FILM = '#e8f2f8'
-const FOUNDATION = '#b8b8b4'
-const SKIRT = '#1a1a1a'
-const WHITE_PANEL = '#f5f5f5'
+const Z0 = HALL_Z0
+const Z1 = HALL_Z1
+const MID_Z = (Z0 + Z1) / 2
 
-/** 고딕 아치 단면 점 (로컬 x: -halfW..halfW, y: 0..ridge) */
+const FRAME = '#9aa3ab'
+const FRAME_DARK = '#7a848e'
+/** 레퍼런스처럼 우유빛 반투명 비닐 */
+const VINYL = '#e8eef3'
+const FOUNDATION = '#aeb0aa'
+const SKIRT = '#141414'
+const WHITE_PANEL = '#f7f7f7'
+const VENT = '#4d565f'
+const GROUND = '#c4b59a'
+
+const vinylMat = {
+  color: VINYL,
+  transparent: true,
+  opacity: 0.52,
+  roughness: 0.38,
+  metalness: 0.0,
+  side: DoubleSide,
+  depthWrite: false,
+} as const
+
+/** 고딕 아치 (살짝 뾰족) — 레퍼런스 지붕 윤곽 */
 function gothicArchPoints(
   halfW: number,
   eavesY: number,
   ridgeY: number,
-  segments = 18,
+  segments = 20,
 ): Array<[number, number]> {
   const pts: Array<[number, number]> = []
   for (let i = 0; i <= segments; i += 1) {
-    const t = i / segments // 0..1 left → right
+    const t = i / segments
     const x = -halfW + t * halfW * 2
-    // 뾰족한 고딕: 두 원호가 중앙에서 만남
-    const nx = Math.abs(x) / halfW // 0 center → 1 edge
-    const arch = Math.pow(1 - nx, 0.72)
+    const nx = Math.abs(x) / halfW
+    const arch = Math.pow(1 - nx, 0.62)
     const y = eavesY + (ridgeY - eavesY) * arch
     pts.push([x, y])
   }
   return pts
 }
 
-/** 아치 리브: 곡선 따라 짧은 실린더 체인 */
-function ArchRib({
-  spanIndex,
-  z,
-}: {
-  spanIndex: number
-  z: number
-}) {
-  const halfW = SPAN_WIDTH / 2
-  const cx = -HALL_WIDTH / 2 + spanIndex * SPAN_WIDTH + halfW
+/** 아치 곡면을 Z방향으로 한 장으로 밀어 연속 비닐 스킨 생성 (평면 교차 없음) */
+function createArchVinylGeometry(
+  halfW: number,
+  eavesY: number,
+  ridgeY: number,
+  z0: number,
+  z1: number,
+  segments = 28,
+): BufferGeometry {
+  const pts = gothicArchPoints(halfW, eavesY, ridgeY, segments)
+  const positions: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+
+  for (let i = 0; i < pts.length; i += 1) {
+    const [x, y] = pts[i]
+    positions.push(x, y, z0, x, y, z1)
+    const u = i / (pts.length - 1)
+    uvs.push(u, 0, u, 1)
+  }
+
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const a = i * 2
+    const b = a + 1
+    const c = a + 2
+    const d = a + 3
+    indices.push(a, c, b, b, c, d)
+  }
+
+  const geo = new BufferGeometry()
+  geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
+  geo.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  return geo
+}
+
+/** 박공면 고딕 아치 채움 (XY 평면, 교차 없는 단일 메시) */
+function createGableVinylGeometry(
+  halfW: number,
+  eavesY: number,
+  ridgeY: number,
+  segments = 24,
+): BufferGeometry {
+  const arch = gothicArchPoints(halfW, eavesY, ridgeY, segments)
+  const positions: number[] = []
+  const indices: number[] = []
+
+  // 중심(처마선 중앙) + 아치 점들로 팬 삼각형
+  positions.push(0, eavesY, 0)
+  for (const [x, y] of arch) {
+    positions.push(x, y, 0)
+  }
+  for (let i = 1; i < arch.length; i += 1) {
+    indices.push(0, i, i + 1)
+  }
+
+  // 처마 아래 수직 벽 사각형
+  const left = positions.length / 3
+  positions.push(-halfW, 0, 0, -halfW, eavesY, 0, halfW, eavesY, 0, halfW, 0, 0)
+  indices.push(left, left + 1, left + 2, left, left + 2, left + 3)
+
+  const geo = new BufferGeometry()
+  geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  return geo
+}
+
+function ArchRib({ spanIndex, z }: { spanIndex: number; z: number }) {
+  const halfW = SPAN_WIDTH / 2 * 0.97
+  const cx = -HALL_WIDTH / 2 + spanIndex * SPAN_WIDTH + SPAN_WIDTH / 2
   const pts = useMemo(
-    () => gothicArchPoints(halfW, EAVES_HEIGHT, RIDGE_HEIGHT, 16),
+    () => gothicArchPoints(halfW, EAVES_HEIGHT, RIDGE_HEIGHT - 0.06, 18),
     [halfW],
   )
 
   return (
-    <group position={[cx, 0, z]}>
+    <group position={[cx, -0.03, z]}>
       {pts.slice(0, -1).map((p, i) => {
         const n = pts[i + 1]
         const mx = (p[0] + n[0]) / 2
@@ -81,16 +160,12 @@ function ArchRib({
         const len = Math.hypot(dx, dy)
         const angle = Math.atan2(dy, dx)
         return (
-          <mesh
-            key={`rib-${i}`}
-            position={[mx, my, 0]}
-            rotation={[0, 0, angle]}
-          >
-            <cylinderGeometry args={[0.028, 0.028, len, 5]} />
+          <mesh key={i} position={[mx, my, 0]} rotation={[0, 0, angle]}>
+            <cylinderGeometry args={[0.028, 0.028, len, 6]} />
             <meshStandardMaterial
               color={FRAME}
-              metalness={0.55}
-              roughness={0.35}
+              metalness={0.45}
+              roughness={0.4}
             />
           </mesh>
         )
@@ -99,127 +174,39 @@ function ArchRib({
   )
 }
 
-/** 스팬 반투명 지붕 필름 (평면 패치 체인) */
-function ArchFilm({ spanIndex }: { spanIndex: number }) {
+/** 스팬당 연속 비닐 지붕 — 평면 패치 교차 없음 */
+function ArchVinyl({ spanIndex }: { spanIndex: number }) {
   const halfW = SPAN_WIDTH / 2
   const cx = -HALL_WIDTH / 2 + spanIndex * SPAN_WIDTH + halfW
-  const pts = useMemo(
-    () => gothicArchPoints(halfW, EAVES_HEIGHT, RIDGE_HEIGHT, 12),
+  const geometry = useMemo(
+    () =>
+      createArchVinylGeometry(
+        halfW,
+        EAVES_HEIGHT,
+        RIDGE_HEIGHT,
+        Z0 - 0.05,
+        Z1 + 0.05,
+        28,
+      ),
     [halfW],
   )
-  const depth = HALL_DEPTH
 
   return (
-    <group position={[cx, 0, (Z0 + Z1) / 2]}>
-      {pts.slice(0, -1).map((p, i) => {
-        const n = pts[i + 1]
-        const mx = (p[0] + n[0]) / 2
-        const my = (p[1] + n[1]) / 2
-        const dx = n[0] - p[0]
-        const dy = n[1] - p[1]
-        const w = Math.hypot(dx, dy)
-        const angle = Math.atan2(dy, dx)
-        return (
-          <mesh
-            key={`film-${i}`}
-            position={[mx, my, 0]}
-            rotation={[0, 0, angle - Math.PI / 2]}
-          >
-            <planeGeometry args={[w * 1.05, depth]} />
-            <meshStandardMaterial
-              color={FILM}
-              transparent
-              opacity={0.28}
-              roughness={0.15}
-              metalness={0.05}
-              side={DoubleSide}
-              depthWrite={false}
-            />
-          </mesh>
-        )
-      })}
-    </group>
+    <mesh geometry={geometry} position={[cx, 0, 0]}>
+      <meshStandardMaterial {...vinylMat} />
+    </mesh>
   )
 }
 
-function Foundation() {
-  const blockW = 0.55
-  const blockH = 0.42
-  const cols = Math.ceil(HALL_WIDTH / blockW)
-  const blocks: Array<[number, number, number]> = []
-  for (let i = 0; i < cols; i += 1) {
-    const x = -HALL_WIDTH / 2 + blockW / 2 + i * blockW
-    blocks.push([x, -blockH / 2, Z0 - 0.08])
-    blocks.push([x, -blockH / 2, Z1 + 0.08])
-  }
-  // 측면
-  const rows = Math.ceil(HALL_DEPTH / blockW)
-  for (let i = 0; i < rows; i += 1) {
-    const z = Z0 + blockW / 2 + i * blockW
-    blocks.push([-HALL_WIDTH / 2 - 0.08, -blockH / 2, z])
-    blocks.push([HALL_WIDTH / 2 + 0.08, -blockH / 2, z])
-  }
-
+/** 스팬 사이 골(거터) 라인 */
+function ValleyGutters() {
   return (
     <group>
-      {blocks.map((pos, i) => (
-        <mesh key={`blk-${i}`} position={pos}>
-          <boxGeometry args={[blockW * 0.96, blockH, blockW * 0.96]} />
-          <meshStandardMaterial color={FOUNDATION} roughness={0.92} />
-        </mesh>
-      ))}
-      {/* 하단 검정 스커트 */}
-      <mesh position={[0, 0.06, (Z0 + Z1) / 2]}>
-        <boxGeometry args={[HALL_WIDTH + 0.2, 0.12, HALL_DEPTH + 0.25]} />
-        <meshStandardMaterial color={SKIRT} roughness={0.8} />
-      </mesh>
-    </group>
-  )
-}
-
-function EndWall({ z, flip }: { z: number; flip?: boolean }) {
-  const vents = Array.from({ length: SPAN_COUNT }, (_, i) => {
-    const halfW = SPAN_WIDTH / 2
-    const cx = -HALL_WIDTH / 2 + i * SPAN_WIDTH + halfW
-    return (
-      <mesh key={`vent-${i}`} position={[cx, RIDGE_HEIGHT - 0.55, 0]}>
-        <boxGeometry args={[0.55, 0.45, 0.08]} />
-        <meshStandardMaterial color="#4a5560" metalness={0.3} roughness={0.5} />
-      </mesh>
-    )
-  })
-
-  return (
-    <group position={[0, 0, z]} rotation={[0, flip ? Math.PI : 0, 0]}>
-      {/* 반투명 박공 면 — 스팬별 대략적 채움 */}
-      {Array.from({ length: SPAN_COUNT }, (_, i) => {
-        const halfW = SPAN_WIDTH / 2
-        const cx = -HALL_WIDTH / 2 + i * SPAN_WIDTH + halfW
+      {Array.from({ length: SPAN_COUNT - 1 }, (_, i) => {
+        const x = -HALL_WIDTH / 2 + (i + 1) * SPAN_WIDTH
         return (
-          <mesh key={`gable-${i}`} position={[cx, EAVES_HEIGHT / 2 + 0.2, 0]}>
-            <planeGeometry args={[SPAN_WIDTH * 0.98, EAVES_HEIGHT + 0.4]} />
-            <meshStandardMaterial
-              color={FILM}
-              transparent
-              opacity={0.22}
-              side={DoubleSide}
-              depthWrite={false}
-            />
-          </mesh>
-        )
-      })}
-      {/* 백색 불투명 하부 패널 (사진의 흰 구간) */}
-      <mesh position={[-SPAN_WIDTH * 0.35, 0.85, 0.02]}>
-        <boxGeometry args={[SPAN_WIDTH * 1.15, 1.7, 0.06]} />
-        <meshStandardMaterial color={WHITE_PANEL} roughness={0.75} />
-      </mesh>
-      {vents}
-      {/* 골조 수직·수평 */}
-      {Array.from({ length: SPAN_COUNT + 1 }, (_, i) => {
-        const x = -HALL_WIDTH / 2 + i * SPAN_WIDTH
-        return (
-          <mesh key={`col-${i}`} position={[x, EAVES_HEIGHT / 2, 0]}>
-            <cylinderGeometry args={[0.04, 0.04, EAVES_HEIGHT, 6]} />
+          <mesh key={i} position={[x, EAVES_HEIGHT - 0.04, MID_Z]}>
+            <boxGeometry args={[0.12, 0.06, HALL_DEPTH + 0.2]} />
             <meshStandardMaterial
               color={FRAME_DARK}
               metalness={0.5}
@@ -232,30 +219,199 @@ function EndWall({ z, flip }: { z: number; flip?: boolean }) {
   )
 }
 
-/** 천장 파이프 그리드 (내부 사진의 격자) */
+function Foundation() {
+  const blockW = 0.48
+  const blockH = 0.5
+  const blocks: Array<[number, number, number]> = []
+  const cols = Math.ceil((HALL_WIDTH + 0.4) / blockW)
+  for (let i = 0; i < cols; i += 1) {
+    const x = -HALL_WIDTH / 2 - 0.1 + blockW / 2 + i * blockW
+    blocks.push([x, -blockH / 2, Z0 - 0.12])
+    blocks.push([x, -blockH / 2, Z1 + 0.12])
+  }
+  const rows = Math.ceil((HALL_DEPTH + 0.4) / blockW)
+  for (let i = 0; i < rows; i += 1) {
+    const z = Z0 + blockW / 2 + i * blockW
+    blocks.push([-HALL_WIDTH / 2 - 0.14, -blockH / 2, z])
+    blocks.push([HALL_WIDTH / 2 + 0.14, -blockH / 2, z])
+  }
+
+  return (
+    <group>
+      {blocks.map((pos, i) => (
+        <mesh key={i} position={pos}>
+          <boxGeometry args={[blockW * 0.94, blockH, blockW * 0.94]} />
+          <meshStandardMaterial color={FOUNDATION} roughness={0.95} />
+        </mesh>
+      ))}
+      {/* 검정 스커트 — 벽 하단 실링 */}
+      <mesh position={[0, 0.08, MID_Z]}>
+        <boxGeometry args={[HALL_WIDTH + 0.28, 0.16, HALL_DEPTH + 0.35]} />
+        <meshStandardMaterial color={SKIRT} roughness={0.85} />
+      </mesh>
+    </group>
+  )
+}
+
+/** 박공면: 연속 비닐 채움 + 하부 백색 패널 + 스팬별 환기창 */
+function EndWall({ z, flip }: { z: number; flip?: boolean }) {
+  const gables = useMemo(() => {
+    const halfW = SPAN_WIDTH / 2 - 0.02
+    return Array.from({ length: SPAN_COUNT }, (_, i) => {
+      const cx = -HALL_WIDTH / 2 + i * SPAN_WIDTH + SPAN_WIDTH / 2
+      const geo = createGableVinylGeometry(
+        halfW,
+        EAVES_HEIGHT,
+        RIDGE_HEIGHT,
+        24,
+      )
+      return { geo, cx }
+    })
+  }, [])
+
+  return (
+    <group position={[0, 0, z]} rotation={[0, flip ? Math.PI : 0, 0]}>
+      {gables.map(({ geo, cx }, i) => (
+        <mesh key={`gable-${i}`} geometry={geo} position={[cx, 0, 0.02]}>
+          <meshStandardMaterial {...vinylMat} />
+        </mesh>
+      ))}
+
+      {/* 하부 불투명 백색 패널 (레퍼런스 흰 구간) */}
+      <mesh position={[-SPAN_WIDTH * 0.15, 0.95, 0.05]}>
+        <boxGeometry args={[SPAN_WIDTH * 1.55, 1.9, 0.07]} />
+        <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+      </mesh>
+      <mesh position={[SPAN_WIDTH * 1.1, 0.55, 0.05]}>
+        <boxGeometry args={[SPAN_WIDTH * 0.85, 1.1, 0.06]} />
+        <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+      </mesh>
+
+      {/* 스팬별 꼭대기 환기창 — 박공면에 flush, 지붕 위로 안 튀어나오게 */}
+      {Array.from({ length: SPAN_COUNT }, (_, i) => {
+        const cx = -HALL_WIDTH / 2 + i * SPAN_WIDTH + SPAN_WIDTH / 2
+        return (
+          <group key={`vent-${i}`} position={[cx, RIDGE_HEIGHT - 0.75, 0.01]}>
+            <mesh>
+              <boxGeometry args={[0.45, 0.36, 0.05]} />
+              <meshStandardMaterial
+                color={VENT}
+                metalness={0.35}
+                roughness={0.45}
+              />
+            </mesh>
+            {[-0.08, 0.02, 0.12].map((vy) => (
+              <mesh key={vy} position={[0, vy, 0.03]}>
+                <boxGeometry args={[0.36, 0.028, 0.012]} />
+                <meshStandardMaterial color="#2f363d" />
+              </mesh>
+            ))}
+          </group>
+        )
+      })}
+
+      {Array.from({ length: SPAN_COUNT + 1 }, (_, i) => {
+        const x = -HALL_WIDTH / 2 + i * SPAN_WIDTH
+        return (
+          <mesh key={`ecol-${i}`} position={[x, EAVES_HEIGHT / 2, 0]}>
+            <cylinderGeometry args={[0.045, 0.045, EAVES_HEIGHT, 6]} />
+            <meshStandardMaterial
+              color={FRAME_DARK}
+              metalness={0.5}
+              roughness={0.38}
+            />
+          </mesh>
+        )
+      })}
+      {[0.7, 1.5, 2.3].map((y) => (
+        <mesh key={`ep-${y}`} position={[0, y, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.025, 0.025, HALL_WIDTH, 5]} />
+          <meshStandardMaterial
+            color={FRAME}
+            metalness={0.45}
+            roughness={0.4}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function SideWall({ x }: { x: number }) {
+  return (
+    <group>
+      {/* 상부 연속 비닐 */}
+      <mesh
+        position={[x, EAVES_HEIGHT / 2 + 0.35, MID_Z]}
+        rotation={[0, Math.PI / 2, 0]}
+      >
+        <planeGeometry args={[HALL_DEPTH + 0.1, EAVES_HEIGHT - 0.5]} />
+        <meshStandardMaterial {...vinylMat} />
+      </mesh>
+      {/* 하부 백색 불투명 */}
+      <mesh position={[x, 0.7, MID_Z]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[HALL_DEPTH + 0.1, 1.4]} />
+        <meshStandardMaterial
+          color={WHITE_PANEL}
+          roughness={0.72}
+          side={DoubleSide}
+        />
+      </mesh>
+      {Array.from({ length: 10 }, (_, i) => {
+        const z = Z0 + 0.4 + i * ((HALL_DEPTH - 0.8) / 9)
+        return (
+          <mesh key={z} position={[x, EAVES_HEIGHT / 2, z]}>
+            <cylinderGeometry args={[0.038, 0.038, EAVES_HEIGHT, 5]} />
+            <meshStandardMaterial
+              color={FRAME}
+              metalness={0.5}
+              roughness={0.4}
+            />
+          </mesh>
+        )
+      })}
+      {[0.9, 1.8, EAVES_HEIGHT].map((y) => (
+        <mesh
+          key={y}
+          position={[x, y, MID_Z]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <cylinderGeometry args={[0.028, 0.028, HALL_DEPTH, 5]} />
+          <meshStandardMaterial
+            color={FRAME}
+            metalness={0.45}
+            roughness={0.4}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 export function CeilingPipeGrid() {
+  // 처마 아래 내부만 — 아치 골을 뚫고 나가지 않도록
+  const y = EAVES_HEIGHT - 0.45
   const beamsX: number[] = []
-  for (let x = -HALL_WIDTH / 2 + 0.5; x <= HALL_WIDTH / 2 - 0.5; x += 1.05) {
+  for (let x = -HALL_WIDTH / 2 + 0.7; x <= HALL_WIDTH / 2 - 0.7; x += 1.15) {
     beamsX.push(x)
   }
   const beamsZ: number[] = []
-  for (let z = Z0 + 0.8; z <= Z1 - 0.8; z += 1.2) {
+  for (let z = Z0 + 1.0; z <= Z1 - 1.0; z += 1.35) {
     beamsZ.push(z)
   }
-  const y = RIDGE_HEIGHT - 0.85
 
   return (
     <group>
       {beamsX.map((x) => (
         <mesh
           key={`px-${x}`}
-          position={[x, y, (Z0 + Z1) / 2]}
+          position={[x, y, MID_Z]}
           rotation={[Math.PI / 2, 0, 0]}
         >
-          <cylinderGeometry args={[0.022, 0.022, HALL_DEPTH - 1.2, 5]} />
+          <cylinderGeometry args={[0.02, 0.02, HALL_DEPTH - 2.2, 5]} />
           <meshStandardMaterial
             color={FRAME}
-            metalness={0.6}
+            metalness={0.55}
             roughness={0.35}
           />
         </mesh>
@@ -266,25 +422,24 @@ export function CeilingPipeGrid() {
           position={[0, y, z]}
           rotation={[0, 0, Math.PI / 2]}
         >
-          <cylinderGeometry args={[0.02, 0.02, HALL_WIDTH - 0.8, 5]} />
+          <cylinderGeometry args={[0.018, 0.018, HALL_WIDTH - 1.2, 5]} />
           <meshStandardMaterial
             color={FRAME}
-            metalness={0.6}
+            metalness={0.55}
             roughness={0.35}
           />
         </mesh>
       ))}
-      {/* 오버헤드 조명 박스 */}
       {beamsZ
         .filter((_, i) => i % 2 === 0)
-        .map((z) =>
-          [-3.5, 0, 3.5].map((x) => (
-            <mesh key={`lamp-${x}-${z}`} position={[x, y - 0.15, z]}>
-              <boxGeometry args={[0.55, 0.08, 0.22]} />
+        .flatMap((z) =>
+          [-3.8, 0, 3.8].map((x) => (
+            <mesh key={`lamp-${x}-${z}`} position={[x, y - 0.1, z]}>
+              <boxGeometry args={[0.45, 0.06, 0.18]} />
               <meshStandardMaterial
                 color="#f8f9fa"
                 emissive="#fff8e7"
-                emissiveIntensity={0.85}
+                emissiveIntensity={0.75}
               />
             </mesh>
           )),
@@ -293,44 +448,10 @@ export function CeilingPipeGrid() {
   )
 }
 
-function SideWall({ x }: { x: number }) {
-  return (
-    <group>
-      <mesh
-        position={[x, EAVES_HEIGHT / 2, (Z0 + Z1) / 2]}
-        rotation={[0, Math.PI / 2, 0]}
-      >
-        <planeGeometry args={[HALL_DEPTH, EAVES_HEIGHT]} />
-        <meshStandardMaterial
-          color={FILM}
-          transparent
-          opacity={0.2}
-          side={DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-      {/* 세로 지주 */}
-      {Array.from({ length: 7 }, (_, i) => {
-        const z = Z0 + 0.5 + i * ((HALL_DEPTH - 1) / 6)
-        return (
-          <mesh key={`sw-${z}`} position={[x, EAVES_HEIGHT / 2, z]}>
-            <cylinderGeometry args={[0.035, 0.035, EAVES_HEIGHT, 5]} />
-            <meshStandardMaterial
-              color={FRAME}
-              metalness={0.5}
-              roughness={0.4}
-            />
-          </mesh>
-        )
-      })}
-    </group>
-  )
-}
-
 export function GreenhouseShell() {
   const ribZs = useMemo(() => {
     const zs: number[] = []
-    for (let z = Z0 + 0.4; z <= Z1 - 0.4; z += 1.35) zs.push(z)
+    for (let z = Z0 + 0.35; z <= Z1 - 0.35; z += 1.05) zs.push(z)
     return zs
   }, [])
 
@@ -347,14 +468,24 @@ export function GreenhouseShell() {
 
   return (
     <group>
-      {/* 흰 바닥 시트 (내부 레퍼런스) */}
+      {/* 외부 대지 (레퍼런스 밭/접근로) */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.01, (Z0 + Z1) / 2]}
+        position={[0, -0.52, MID_Z]}
         receiveShadow
       >
-        <planeGeometry args={[HALL_WIDTH - 0.3, HALL_DEPTH - 0.4]} />
-        <meshStandardMaterial color="#f7f7f5" roughness={0.55} />
+        <planeGeometry args={[HALL_WIDTH + 18, HALL_DEPTH + 16]} />
+        <meshStandardMaterial color={GROUND} roughness={0.95} />
+      </mesh>
+
+      {/* 내부 흰 바닥 */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.01, MID_Z]}
+        receiveShadow
+      >
+        <planeGeometry args={[HALL_WIDTH - 0.35, HALL_DEPTH - 0.5]} />
+        <meshStandardMaterial color="#f4f4f2" roughness={0.55} />
       </mesh>
 
       <Foundation />
@@ -362,44 +493,67 @@ export function GreenhouseShell() {
       <SideWall x={HALL_WIDTH / 2} />
       <EndWall z={Z0} />
       <EndWall z={Z1} flip />
+      <ValleyGutters />
 
       {Array.from({ length: SPAN_COUNT }, (_, s) => (
         <group key={`span-${s}`}>
-          <ArchFilm spanIndex={s} />
+          <ArchVinyl spanIndex={s} />
           {ribZs.map((z) => (
-            <ArchRib key={`ar-${s}-${z}`} spanIndex={s} z={z} />
+            <ArchRib key={`${s}-${z}`} spanIndex={s} z={z} />
           ))}
         </group>
       ))}
 
       {columns.map((pos, i) => (
         <mesh key={`col-${i}`} position={pos}>
-          <cylinderGeometry args={[0.05, 0.05, EAVES_HEIGHT, 6]} />
+          <cylinderGeometry args={[0.052, 0.052, EAVES_HEIGHT, 6]} />
           <meshStandardMaterial
             color={FRAME_DARK}
-            metalness={0.55}
+            metalness={0.5}
             roughness={0.38}
           />
         </mesh>
       ))}
 
-      {/* 처마 가로 퍼린 */}
       {Array.from({ length: SPAN_COUNT + 1 }, (_, s) => {
         const x = -HALL_WIDTH / 2 + s * SPAN_WIDTH
         return (
           <mesh
             key={`eave-${s}`}
-            position={[x, EAVES_HEIGHT, (Z0 + Z1) / 2]}
+            position={[x, EAVES_HEIGHT, MID_Z]}
             rotation={[Math.PI / 2, 0, 0]}
           >
-            <cylinderGeometry args={[0.03, 0.03, HALL_DEPTH, 5]} />
+            <cylinderGeometry args={[0.034, 0.034, HALL_DEPTH, 5]} />
             <meshStandardMaterial
               color={FRAME}
-              metalness={0.5}
+              metalness={0.45}
               roughness={0.4}
             />
           </mesh>
         )
+      })}
+
+      {/* 아치 리브 안쪽 퍼린 — 비닐 아래로 살짝 inset */}
+      {Array.from({ length: SPAN_COUNT }, (_, s) => {
+        const halfW = SPAN_WIDTH / 2
+        const cx = -HALL_WIDTH / 2 + s * SPAN_WIDTH + halfW
+        const pts = gothicArchPoints(halfW * 0.96, EAVES_HEIGHT, RIDGE_HEIGHT - 0.08, 8)
+        return pts
+          .filter((_, i) => i > 0 && i < pts.length - 1 && i % 2 === 0)
+          .map((p, i) => (
+            <mesh
+              key={`purl-${s}-${i}`}
+              position={[cx + p[0], p[1] - 0.04, MID_Z]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <cylinderGeometry args={[0.016, 0.016, HALL_DEPTH - 1.2, 4]} />
+              <meshStandardMaterial
+                color={FRAME}
+                metalness={0.4}
+                roughness={0.45}
+              />
+            </mesh>
+          ))
       })}
 
       <CeilingPipeGrid />

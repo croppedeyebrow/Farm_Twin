@@ -298,6 +298,105 @@
   color: #3d4a42;
 }
 
+/* 작물 크기·위치 튜닝 (뷰포트 좌하단) */
+.crop-tune-panel {
+  position: absolute;
+  z-index: 3;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  width: min(18.5rem, calc(100% - 2.5rem));
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  padding: 0.85rem 0.95rem;
+  color: #13241c;
+  background: color-mix(in srgb, #f3f7f4 92%, transparent);
+  border: 1px solid color-mix(in srgb, #0f3d2e 18%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px color-mix(in srgb, #0f3d2e 12%, transparent);
+}
+
+.crop-tune-fab {
+  position: absolute;
+  z-index: 3;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0f3d2e;
+  background: color-mix(in srgb, #f3f7f4 92%, transparent);
+  border: 1px solid color-mix(in srgb, #0f3d2e 18%, transparent);
+  cursor: pointer;
+}
+
+.crop-tune-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid #c9d4cc;
+  font-size: 0.88rem;
+}
+
+.crop-tune-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.crop-tune-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+  color: #0f3d2e;
+  background: #e8efe9;
+  border: 1px solid #c9d4cc;
+  cursor: pointer;
+}
+
+.crop-tune-btn:hover {
+  background: #dce6de;
+}
+
+.crop-tune-section {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+.crop-tune-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+
+.crop-tune-row {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  color: #4a554e;
+}
+
+.crop-tune-row span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.crop-tune-row em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: #0f3d2e;
+  font-weight: 600;
+}
+
+.crop-tune-row input[type='range'] {
+  width: 100%;
+  accent-color: #0f3d2e;
+}
+
 @media (max-width: 960px) {
   .overlay {
     width: calc(100% - 1.5rem);

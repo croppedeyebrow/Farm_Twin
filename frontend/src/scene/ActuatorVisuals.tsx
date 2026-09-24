@@ -12,6 +12,7 @@ import { useRef } from 'react'
 import type { Group } from 'three'
 
 import type { ActuatorSummary } from '../api/farms'
+import { HALL_Z0, RIDGE_HEIGHT, SPAN_WIDTH } from './GreenhouseShell'
 
 type ActuatorVisualsProps = {
   actuators: ActuatorSummary[]
@@ -85,35 +86,26 @@ export function ActuatorVisuals({
 
   return (
     <group>
-      {/* 박공 환기팬 위치 (외피 환기창 근처) */}
-      <Fan
-        position={[-4.2, 3.6, -5.2]}
-        speed={fan.ratio}
-        selected={fan.id === selectedActuatorId}
-        onSelect={() => fan.id && onSelect(fan.id)}
-      />
-      <Fan
-        position={[0, 3.6, -5.2]}
-        speed={fan.ratio}
-        selected={fan.id === selectedActuatorId}
-        onSelect={() => fan.id && onSelect(fan.id)}
-      />
-      <Fan
-        position={[4.2, 3.6, -5.2]}
-        speed={fan.ratio}
-        selected={fan.id === selectedActuatorId}
-        onSelect={() => fan.id && onSelect(fan.id)}
-      />
+      {/* 박공 안쪽 환기팬 — 스팬 중앙, 지붕 위로 안 나오게 */}
+      {[-SPAN_WIDTH, 0, SPAN_WIDTH].map((x) => (
+        <Fan
+          key={`fan-${x}`}
+          position={[x, RIDGE_HEIGHT - 0.85, HALL_Z0 + 0.35]}
+          speed={fan.ratio}
+          selected={fan.id === selectedActuatorId}
+          onSelect={() => fan.id && onSelect(fan.id)}
+        />
+      ))}
 
-      {/* HVAC 배지 */}
+      {/* HVAC / 제습 — 측벽 안쪽 */}
       <mesh
-        position={[-5.8, 1.2, 4.5]}
+        position={[-5.6, 1.15, 4.2]}
         onClick={(event) => {
           event.stopPropagation()
           if (hvac.id) onSelect(hvac.id)
         }}
       >
-        <boxGeometry args={[0.35, 0.55, 0.2]} />
+        <boxGeometry args={[0.32, 0.5, 0.18]} />
         <meshStandardMaterial
           color={hvac.ratio > 0 ? '#74c0fc' : '#ced4da'}
           emissive={hvac.ratio > 0 ? '#4dabf7' : '#000000'}
@@ -121,15 +113,14 @@ export function ActuatorVisuals({
         />
       </mesh>
 
-      {/* 제습기 배지 */}
       <mesh
-        position={[5.8, 1.2, 4.5]}
+        position={[5.6, 1.15, 4.2]}
         onClick={(event) => {
           event.stopPropagation()
           if (dehum.id) onSelect(dehum.id)
         }}
       >
-        <boxGeometry args={[0.35, 0.55, 0.2]} />
+        <boxGeometry args={[0.32, 0.5, 0.18]} />
         <meshStandardMaterial
           color={dehum.ratio > 0 ? '#63e6be' : '#ced4da'}
           emissive={dehum.ratio > 0 ? '#38d9a9' : '#000000'}
@@ -137,10 +128,9 @@ export function ActuatorVisuals({
         />
       </mesh>
 
-      {/* 관수 펄스 — 딸기 통로 바닥 */}
       {irrig.ratio > 0 ? (
         <mesh
-          position={[1.15, 0.08, -1.5]}
+          position={[1.3, 0.08, -1.2]}
           rotation={[-Math.PI / 2, 0, 0]}
           onClick={(event) => {
             event.stopPropagation()

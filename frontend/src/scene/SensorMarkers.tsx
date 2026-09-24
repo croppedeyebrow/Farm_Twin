@@ -37,8 +37,8 @@ function positionForSensor(
     // 딸기 거터 높이 근처
     return [1.0 + (index % 3) * 1.1, 1.25, -0.5 - (index % 4) * 0.8]
   }
-  // 환경 센서 — 포도 베이 입구 측면
-  return [-3.6, 1.5 + (index % 3) * 0.4, 2.2 - index * 0.2]
+  // 환경 센서 — 포도 베이 입구 측면 (벽 안)
+  return [-3.8, 1.5 + (index % 3) * 0.35, 1.8 - index * 0.15]
 }
 
 function SensorMarker({
