@@ -23,8 +23,9 @@
     y_k           = true_delayed + offset + ε
     ε ~ N(0, σ²)                               # σ = noise_std, 결정적 시드
 
-그 후 units.SENSOR_VALUE_RANGE 로 clamp.
-clamp 가 일어나면 quality = SUSPECT, 아니면 GOOD.
+그 후 telemetry 파이프라인으로 단위 정규화 + 범위 clamp.
+clamp 가 일어나면 quality = SUSPECT + quality_reason, 아니면 GOOD.
+raw_value 는 clamp 전 값을 보존한다.
 
 근거
 ----
@@ -52,7 +53,12 @@ from dataclasses import dataclass, field
 
 from app.domain.enums import ReadingQuality, ReadingSource, SensorType, Unit
 from app.domain.simulation.state import EnvironmentState
-from app.domain.units import default_unit_for, value_range_for
+from app.domain.telemetry import (
+    TELEMETRY_READING_SCHEMA_VERSION,
+    TelemetryReadingIn,
+    process_telemetry_reading,
+)
+from app.domain.units import default_unit_for
 
 
 @dataclass(frozen=True)
@@ -84,15 +90,22 @@ class SensorSample:
 
     SensorReading ORM 행으로 투영된다.
     true_value 는 테스트·디버그용이며 farm_states 에 쓰지 않는다.
+
+    Day 20: raw_value / value(normalized) / quality_reason 분리.
+    `value` 는 정규화·clamp 후 값 (= normalized_value) — 하위 호환 이름.
     """
 
     sensor_type: SensorType
-    value: float  # 측정값 (offset+noise+delay+clamp 후)
-    unit: Unit
+    raw_value: float  # offset+noise 후·정규화·clamp 전
+    value: float  # 정규화·clamp 후 (저장·규칙용)
+    unit: Unit  # 정규화 단위
+    input_unit: Unit
     quality: ReadingQuality
+    quality_reason: str | None
     source: ReadingSource
     simulation_time: float
     true_value: float  # delay 적용 후·noise 적용 전 참값 스칼라
+    telemetry_schema_version: str = TELEMETRY_READING_SCHEMA_VERSION
 
 
 def true_value_for(state: EnvironmentState, sensor_type: SensorType) -> float:
@@ -155,8 +168,8 @@ class VirtualSensorBank:
         --------------------
         1. true_now 를 버퍼에 append
         2. delay_steps 만큼 과거 참값 선택 (버퍼가 짧으면 가장 오래된 값)
-        3. offset + 결정적 가우시안 noise
-        4. 물리 범위 clamp → quality
+        3. offset + 결정적 가우시안 noise → raw_value
+        4. telemetry 파이프라인 (단위 정규화 + 범위 quality)
         """
         samples: list[SensorSample] = []
         for channel in self.channels:
@@ -183,22 +196,30 @@ class VirtualSensorBank:
                 noise = 0.0
 
             raw = delayed_true + channel.offset + noise
-            low, high = value_range_for(channel.sensor_type)
-            clamped = min(high, max(low, raw))
-            # clamp 발생 = 물리적으로 수상한 관측 → SUSPECT (삭제가 아니라 태그)
-            quality = (
-                ReadingQuality.SUSPECT if clamped != raw else ReadingQuality.GOOD
+            input_unit = default_unit_for(channel.sensor_type)
+            normalized = process_telemetry_reading(
+                TelemetryReadingIn(
+                    sensor_type=channel.sensor_type,
+                    raw_value=raw,
+                    input_unit=input_unit,
+                    source=source,
+                    simulation_time=state.simulation_time,
+                )
             )
 
             samples.append(
                 SensorSample(
                     sensor_type=channel.sensor_type,
-                    value=clamped,
-                    unit=default_unit_for(channel.sensor_type),
-                    quality=quality,
+                    raw_value=normalized.raw_value,
+                    value=normalized.normalized_value,
+                    unit=normalized.unit,
+                    input_unit=normalized.input_unit,
+                    quality=normalized.quality,
+                    quality_reason=normalized.quality_reason,
                     source=source,
                     simulation_time=state.simulation_time,
                     true_value=delayed_true,
+                    telemetry_schema_version=normalized.schema_version,
                 )
             )
         return samples

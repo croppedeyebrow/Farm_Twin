@@ -99,6 +99,13 @@ class SensorReading(Base):
     """
     가상 센서 시계열 (append-only, 원본 수정 금지).
 
+    Day 20 분리
+    -----------
+    - raw_value / input_unit : ingest 원본 (덮어쓰지 않음)
+    - value / unit           : 정규화·clamp 후 (규칙·관제용)
+    - quality / quality_reason
+    - telemetry_schema_version : reading 계약 (envelope 의 events.v1 과 별개)
+
     인덱스(설계):
     - (sensor_id, simulation_time DESC)
     - (simulation_run_id, sequence) UNIQUE
@@ -156,13 +163,22 @@ class SensorReading(Base):
         index=True,
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    # value = normalized (규칙·관제용). raw_value 는 원본 보존 (Day 20).
     value: Mapped[float] = mapped_column(Float, nullable=False)
+    raw_value: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[Unit] = mapped_column(str_enum(Unit), nullable=False)
+    input_unit: Mapped[Unit] = mapped_column(str_enum(Unit), nullable=False)
     quality: Mapped[ReadingQuality] = mapped_column(
         str_enum(ReadingQuality, length=16),
         nullable=False,
         default=ReadingQuality.GOOD,
         index=True,
+    )
+    quality_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    telemetry_schema_version: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="telemetry.reading.v1",
     )
     source: Mapped[ReadingSource] = mapped_column(
         str_enum(ReadingSource, length=32),

@@ -11,10 +11,12 @@
  *
  * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png, strawberry line.png
  * 작물 GLB: public/models/strawberry-set.glb, grape.glb
+ * 센서 GLB: public/models/temp-moisture-sensor.glb (온·습도·배지)
  */
 
 import { OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
+import { Suspense } from 'react'
 
 import { useRealtimeStore } from '../store/realtimeStore'
 import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
@@ -88,18 +90,20 @@ export function GrowingRoomScene() {
         />
       ))}
 
-      <SensorMarkers
-        sensors={sensors}
-        state={state}
-        stale={stale}
-        selectedSensorId={selectedSensorId}
-        onSelect={(sensorId, metricKey) => {
-          selectSensor(sensorId)
-          if (metricKey) {
-            setChartMetric(metricKey as SensorMetricKey)
-          }
-        }}
-      />
+      <Suspense fallback={null}>
+        <SensorMarkers
+          sensors={sensors}
+          state={state}
+          stale={stale}
+          selectedSensorId={selectedSensorId}
+          onSelect={(sensorId, metricKey) => {
+            selectSensor(sensorId)
+            if (metricKey) {
+              setChartMetric(metricKey as SensorMetricKey)
+            }
+          }}
+        />
+      </Suspense>
 
       <ActuatorVisuals
         actuators={actuators}

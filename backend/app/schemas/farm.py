@@ -116,9 +116,13 @@ class SensorReadingOut(BaseModel):
     id: uuid.UUID
     sensor_id: uuid.UUID
     sequence: int
-    value: float
+    value: float  # normalized
+    raw_value: float
     unit: Unit
+    input_unit: Unit
     quality: ReadingQuality
+    quality_reason: str | None = None
+    telemetry_schema_version: str
     source: ReadingSource
     simulation_time: float
     sampled_at: datetime

@@ -54,12 +54,14 @@ class ActuatorType(StrEnum):
 
 class Unit(StrEnum):
     """
-    측정·상태 값의 물리 단위 (정규화 후 저장 단위).
+    측정·상태 값의 물리 단위.
 
-    원본 단위가 달라도 파이프라인에서 여기 값으로 맞춘 뒤 저장한다.
+    정규화 후 저장 단위는 CELSIUS / PERCENT / PPM / MICROMOLE_PER_M2_S 등.
+    FAHRENHEIT 는 ingest 입력용이며 저장 `unit` 으로는 쓰지 않는다.
     """
 
     CELSIUS = "C"
+    FAHRENHEIT = "F"  # input-only → CELSIUS 로 정규화
     PERCENT = "%"
     PPM = "ppm"
     MICROMOLE_PER_M2_S = "umol/m2/s"  # PPFD
