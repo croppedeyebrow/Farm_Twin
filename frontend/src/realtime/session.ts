@@ -96,6 +96,10 @@ function handleEnvelope(envelope: EventEnvelope): void {
   }
   if (envelope.event_type === 'simulation.status') {
     store.applySimulationStatusPayload(envelope.payload, decision.nextLast)
+    return
+  }
+  if (envelope.event_type === 'actuator.updated') {
+    store.applyActuatorUpdatedPayload(envelope.payload, decision.nextLast)
   }
 }
 

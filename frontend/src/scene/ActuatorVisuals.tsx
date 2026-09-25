@@ -1,10 +1,10 @@
 /**
- * 액추에이터 비주얼 (5단계 Day 19).
+ * 액추에이터 비주얼 (5단계 Day 19 / 트윈 설비 구별).
  *
- * - ventilation_fan: 회전 블레이드 (output_ratio → 각속도)
- * - led: StrawberryRack 이 담당 (여기서는 천장 보조광)
- * - irrigation_pump: 터널 바닥 물줄기 펄스
- * - hvac / dehumidifier: 상태 배지 박스
+ * - ventilation_fan: 박공 환기팬
+ * - led: StrawberryRack GrowLightStrip
+ * - irrigation_pump: 바닥 물줄기
+ * - hvac / dehumidifier: 천장 온·습도 조절 카세트 (LED 아님)
  */
 
 import { useFrame } from '@react-three/fiber'
@@ -12,7 +12,7 @@ import { useRef } from 'react'
 import type { Group } from 'three'
 
 import type { ActuatorSummary } from '../api/farms'
-import { HALL_Z0, RIDGE_HEIGHT, SPAN_WIDTH } from './GreenhouseShell'
+import { EAVES_HEIGHT, HALL_Z0, RIDGE_HEIGHT, SPAN_WIDTH } from './GreenhouseShell'
 
 type ActuatorVisualsProps = {
   actuators: ActuatorSummary[]
@@ -25,8 +25,12 @@ function ratioOf(
   type: string,
 ): { ratio: number; id: string | null; mode: string } {
   const hit = actuators.find((item) => item.actuator_type === type)
-  if (!hit || hit.mode === 'off') {
-    return { ratio: 0, id: hit?.id ?? null, mode: hit?.mode ?? 'off' }
+  if (!hit) {
+    return { ratio: 0, id: null, mode: 'off' }
+  }
+  // OFF 만 출력 0. manual/on/auto 는 output_ratio 사용
+  if (hit.mode === 'off' || hit.output_ratio <= 0) {
+    return { ratio: 0, id: hit.id, mode: hit.mode }
   }
   return { ratio: hit.output_ratio, id: hit.id, mode: hit.mode }
 }
@@ -74,6 +78,56 @@ function Fan({
   )
 }
 
+function ClimateCassette({
+  position,
+  active,
+  kind,
+  selected,
+  onSelect,
+}: {
+  position: [number, number, number]
+  active: boolean
+  kind: 'hvac' | 'dehumidifier'
+  selected: boolean
+  onSelect: () => void
+}) {
+  const accent = kind === 'hvac' ? '#74c0fc' : '#63e6be'
+  const emissive = kind === 'hvac' ? '#4dabf7' : '#38d9a9'
+  return (
+    <group
+      position={position}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelect()
+      }}
+    >
+      <mesh>
+        <boxGeometry args={[0.58, 0.16, 0.34]} />
+        <meshStandardMaterial
+          color={selected ? '#dee2e6' : '#e9ecef'}
+          roughness={0.5}
+          emissive={active ? emissive : '#000000'}
+          emissiveIntensity={active ? 0.25 : 0}
+        />
+      </mesh>
+      <mesh position={[0, -0.09, 0]}>
+        <boxGeometry args={[0.5, 0.03, 0.28]} />
+        <meshStandardMaterial
+          color={active ? accent : '#868e96'}
+          emissive={active ? accent : '#000000'}
+          emissiveIntensity={active ? 0.35 : 0}
+        />
+      </mesh>
+      {selected ? (
+        <mesh position={[0, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.22, 0.3, 20]} />
+          <meshBasicMaterial color="#228be6" transparent opacity={0.45} />
+        </mesh>
+      ) : null}
+    </group>
+  )
+}
+
 export function ActuatorVisuals({
   actuators,
   selectedActuatorId,
@@ -83,10 +137,10 @@ export function ActuatorVisuals({
   const hvac = ratioOf(actuators, 'hvac')
   const dehum = ratioOf(actuators, 'dehumidifier')
   const irrig = ratioOf(actuators, 'irrigation_pump')
+  const climateY = EAVES_HEIGHT - 0.45 - 0.12
 
   return (
     <group>
-      {/* 박공 안쪽 환기팬 — 스팬 중앙, 지붕 위로 안 나오게 */}
       {[-SPAN_WIDTH, 0, SPAN_WIDTH].map((x) => (
         <Fan
           key={`fan-${x}`}
@@ -97,36 +151,34 @@ export function ActuatorVisuals({
         />
       ))}
 
-      {/* HVAC / 제습 — 측벽 안쪽 */}
-      <mesh
-        position={[-5.6, 1.15, 4.2]}
-        onClick={(event) => {
-          event.stopPropagation()
-          if (hvac.id) onSelect(hvac.id)
-        }}
-      >
-        <boxGeometry args={[0.32, 0.5, 0.18]} />
-        <meshStandardMaterial
-          color={hvac.ratio > 0 ? '#74c0fc' : '#ced4da'}
-          emissive={hvac.ratio > 0 ? '#4dabf7' : '#000000'}
-          emissiveIntensity={hvac.ratio > 0 ? 0.4 : 0}
-        />
-      </mesh>
-
-      <mesh
-        position={[5.6, 1.15, 4.2]}
-        onClick={(event) => {
-          event.stopPropagation()
-          if (dehum.id) onSelect(dehum.id)
-        }}
-      >
-        <boxGeometry args={[0.32, 0.5, 0.18]} />
-        <meshStandardMaterial
-          color={dehum.ratio > 0 ? '#63e6be' : '#ced4da'}
-          emissive={dehum.ratio > 0 ? '#38d9a9' : '#000000'}
-          emissiveIntensity={dehum.ratio > 0 ? 0.35 : 0}
-        />
-      </mesh>
+      <ClimateCassette
+        position={[-3.8, climateY, 1.0]}
+        active={hvac.ratio > 0}
+        kind="hvac"
+        selected={hvac.id === selectedActuatorId}
+        onSelect={() => hvac.id && onSelect(hvac.id)}
+      />
+      <ClimateCassette
+        position={[0, climateY, 1.0]}
+        active={hvac.ratio > 0}
+        kind="hvac"
+        selected={hvac.id === selectedActuatorId}
+        onSelect={() => hvac.id && onSelect(hvac.id)}
+      />
+      <ClimateCassette
+        position={[3.8, climateY, 1.0]}
+        active={dehum.ratio > 0}
+        kind="dehumidifier"
+        selected={dehum.id === selectedActuatorId}
+        onSelect={() => dehum.id && onSelect(dehum.id)}
+      />
+      <ClimateCassette
+        position={[-3.8, climateY, -2.7]}
+        active={dehum.ratio > 0}
+        kind="dehumidifier"
+        selected={dehum.id === selectedActuatorId}
+        onSelect={() => dehum.id && onSelect(dehum.id)}
+      />
 
       {irrig.ratio > 0 ? (
         <mesh
@@ -149,7 +201,6 @@ export function ActuatorVisuals({
   )
 }
 
-/** 딸기 랙용 LED/관수 비율 헬퍼 */
 export function actuatorRatios(actuators: ActuatorSummary[]) {
   return {
     led: ratioOf(actuators, 'led').ratio,

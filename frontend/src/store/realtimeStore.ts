@@ -73,6 +73,10 @@ export type RealtimeStore = {
     payload: Record<string, unknown>,
     sequence: number,
   ) => void
+  applyActuatorUpdatedPayload: (
+    payload: Record<string, unknown>,
+    sequence: number,
+  ) => void
   setLastSequence: (sequence: number) => void
   setControlEvents: (events: ControlEventOut[]) => void
   selectSensor: (id: string | null) => void
@@ -238,6 +242,52 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
       }
       return {
         simulationStatus: status,
+        lastSequence: sequence,
+        stale: false,
+        timeline: mergeTimeline(current.timeline, [entry]),
+      }
+    }),
+
+  applyActuatorUpdatedPayload: (payload, sequence) =>
+    set((current) => {
+      const id = typeof payload.id === 'string' ? payload.id : null
+      if (!id) {
+        return { lastSequence: sequence, stale: false }
+      }
+      const nextActuators = current.actuators.map((item) => {
+        if (item.id !== id) return item
+        return {
+          ...item,
+          mode: typeof payload.mode === 'string' ? payload.mode : item.mode,
+          output_ratio:
+            typeof payload.output_ratio === 'number'
+              ? payload.output_ratio
+              : item.output_ratio,
+          code: typeof payload.code === 'string' ? payload.code : item.code,
+          name: typeof payload.name === 'string' ? payload.name : item.name,
+          actuator_type:
+            typeof payload.actuator_type === 'string'
+              ? payload.actuator_type
+              : item.actuator_type,
+        }
+      })
+      const code =
+        typeof payload.code === 'string'
+          ? payload.code
+          : (nextActuators.find((a) => a.id === id)?.code ?? 'actuator')
+      const ratio =
+        typeof payload.output_ratio === 'number' ? payload.output_ratio : 0
+      const mode = typeof payload.mode === 'string' ? payload.mode : '?'
+      const entry: TimelineEntry = {
+        id: `actuator-${sequence}`,
+        kind: 'control',
+        title: `actuator.updated · ${code}`,
+        detail: `${mode} @ ${ratio.toFixed(2)}`,
+        simulation_time: current.state?.simulation_time ?? 0,
+        recorded_at: new Date().toISOString(),
+      }
+      return {
+        actuators: nextActuators,
         lastSequence: sequence,
         stale: false,
         timeline: mergeTimeline(current.timeline, [entry]),

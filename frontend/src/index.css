@@ -1,9 +1,9 @@
-/* 전역 베이스 — 3D 캔버스 배경색(#d7e4db)과 맞춤 */
+/* 전역 베이스 */
 
 :root {
-  color: #1a1f1c;
-  background: #d7e4db;
-  font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+  color: #e8ecf1;
+  background: #0e131b;
+  font-family: 'IBM Plex Sans KR', 'Segoe UI', 'Malgun Gothic', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -26,6 +26,11 @@ body,
 
 body {
   min-width: 320px;
-  /* 관제 화면은 뷰포트 고정. 스크롤은 오버레이 내부에서만 필요 시 허용 */
   overflow: hidden;
+  height: 100%;
+}
+
+html,
+#root {
+  height: 100%;
 }

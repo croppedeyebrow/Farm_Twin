@@ -28,6 +28,7 @@ from app.schemas.farm import (
     FarmSnapshot,
     FarmStateOut,
     FarmSummary,
+    ManualActuatorSet,
     SensorReadingOut,
     SensorSummary,
 )
@@ -78,6 +79,27 @@ async def list_farm_actuators(
 ) -> list[ActuatorSummary]:
     """농장 액추에이터 목록."""
     return await farm_service.list_farm_actuators(session, farm_id)
+
+
+@router.post(
+    "/actuators/{actuator_id}/manual",
+    response_model=ActuatorSummary,
+)
+async def set_actuator_manual(
+    actuator_id: uuid.UUID,
+    body: ManualActuatorSet,
+    session: DbSession,
+) -> ActuatorSummary:
+    """
+    운영자 수동 출력 (LED 조도 등).
+
+    MVP: 로컬/동일 오리진 API 만 가정. 인증은 이후 단계에서 추가.
+    """
+    return await farm_service.set_actuator_manual(
+        session,
+        actuator_id,
+        output_ratio=body.output_ratio,
+    )
 
 
 @router.get("/farms/{farm_id}/events", response_model=list[ControlEventOut])

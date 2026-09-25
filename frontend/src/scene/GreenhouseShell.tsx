@@ -254,7 +254,16 @@ function Foundation() {
 }
 
 /** 박공면: 연속 비닐 채움 + 하부 백색 패널 + 스팬별 환기창 */
-function EndWall({ z, flip }: { z: number; flip?: boolean }) {
+function EndWall({
+  z,
+  flip,
+  doorOpening,
+}: {
+  z: number
+  flip?: boolean
+  /** 입구 문 개구 (중앙만 비우고 하부는 전체 피복) */
+  doorOpening?: boolean
+}) {
   const gables = useMemo(() => {
     const halfW = SPAN_WIDTH / 2 - 0.02
     return Array.from({ length: SPAN_COUNT }, (_, i) => {
@@ -269,6 +278,12 @@ function EndWall({ z, flip }: { z: number; flip?: boolean }) {
     })
   }, [])
 
+  // 하부 백색 피복 높이 (= 문 높이). 위는 처마까지 이어 붙인다.
+  const cladH = 2.2
+  const doorHalf = 1.15
+  const sideW = HALL_WIDTH / 2 - doorHalf
+  const upperH = Math.max(0.2, EAVES_HEIGHT - cladH)
+
   return (
     <group position={[0, 0, z]} rotation={[0, flip ? Math.PI : 0, 0]}>
       {gables.map(({ geo, cx }, i) => (
@@ -277,15 +292,37 @@ function EndWall({ z, flip }: { z: number; flip?: boolean }) {
         </mesh>
       ))}
 
-      {/* 하부 불투명 백색 패널 (레퍼런스 흰 구간) */}
-      <mesh position={[-SPAN_WIDTH * 0.15, 0.95, 0.05]}>
-        <boxGeometry args={[SPAN_WIDTH * 1.55, 1.9, 0.07]} />
-        <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
-      </mesh>
-      <mesh position={[SPAN_WIDTH * 1.1, 0.55, 0.05]}>
-        <boxGeometry args={[SPAN_WIDTH * 0.85, 1.1, 0.06]} />
-        <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
-      </mesh>
+      {doorOpening ? (
+        <>
+          {/* 문 왼쪽 — 벽 끝~문까지 통피복 */}
+          <mesh position={[-(doorHalf + sideW / 2), cladH / 2, 0.05]}>
+            <boxGeometry args={[sideW, cladH, 0.07]} />
+            <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+          </mesh>
+          {/* 문 오른쪽 */}
+          <mesh position={[doorHalf + sideW / 2, cladH / 2, 0.05]}>
+            <boxGeometry args={[sideW, cladH, 0.07]} />
+            <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+          </mesh>
+          {/* 문 위~처마 — 가로 전체 */}
+          <mesh position={[0, cladH + upperH / 2, 0.05]}>
+            <boxGeometry args={[HALL_WIDTH, upperH, 0.07]} />
+            <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          {/* 후면 박공: 하부 전폭 피복 (조각 패널 금지) */}
+          <mesh position={[0, cladH / 2, 0.05]}>
+            <boxGeometry args={[HALL_WIDTH, cladH, 0.07]} />
+            <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+          </mesh>
+          <mesh position={[0, cladH + upperH / 2, 0.05]}>
+            <boxGeometry args={[HALL_WIDTH, upperH, 0.07]} />
+            <meshStandardMaterial color={WHITE_PANEL} roughness={0.7} />
+          </mesh>
+        </>
+      )}
 
       {/* 스팬별 꼭대기 환기창 — 박공면에 flush, 지붕 위로 안 튀어나오게 */}
       {Array.from({ length: SPAN_COUNT }, (_, i) => {
@@ -430,18 +467,44 @@ export function CeilingPipeGrid() {
           />
         </mesh>
       ))}
+      {/*
+        천장 카세트 = 온·습도 조절장치 (HVAC/제습) — LED 아님.
+        LED 생장등은 StrawberryRack GrowLightStrip.
+      */}
       {beamsZ
         .filter((_, i) => i % 2 === 0)
         .flatMap((z) =>
           [-3.8, 0, 3.8].map((x) => (
-            <mesh key={`lamp-${x}-${z}`} position={[x, y - 0.1, z]}>
-              <boxGeometry args={[0.45, 0.06, 0.18]} />
-              <meshStandardMaterial
-                color="#f8f9fa"
-                emissive="#fff8e7"
-                emissiveIntensity={0.75}
-              />
-            </mesh>
+            <group key={`climate-${x}-${z}`} position={[x, y - 0.12, z]}>
+              <mesh>
+                <boxGeometry args={[0.55, 0.14, 0.32]} />
+                <meshStandardMaterial
+                  color="#e9ecef"
+                  roughness={0.55}
+                  metalness={0.08}
+                />
+              </mesh>
+              {/* 흡배기 그릴 */}
+              <mesh position={[0, -0.075, 0]}>
+                <boxGeometry args={[0.48, 0.02, 0.26]} />
+                <meshStandardMaterial color="#868e96" roughness={0.7} />
+              </mesh>
+              {[-0.12, 0, 0.12].map((gz) => (
+                <mesh key={`g-${gz}`} position={[0, -0.086, gz]}>
+                  <boxGeometry args={[0.42, 0.008, 0.025]} />
+                  <meshStandardMaterial color="#495057" />
+                </mesh>
+              ))}
+              {/* 측면 배관 연결 */}
+              <mesh position={[0.3, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.025, 0.025, 0.12, 6]} />
+                <meshStandardMaterial
+                  color={FRAME}
+                  metalness={0.5}
+                  roughness={0.4}
+                />
+              </mesh>
+            </group>
           )),
         )}
     </group>
@@ -492,7 +555,7 @@ export function GreenhouseShell() {
       <SideWall x={-HALL_WIDTH / 2} />
       <SideWall x={HALL_WIDTH / 2} />
       <EndWall z={Z0} />
-      <EndWall z={Z1} flip />
+      <EndWall z={Z1} flip doorOpening />
       <ValleyGutters />
 
       {Array.from({ length: SPAN_COUNT }, (_, s) => (

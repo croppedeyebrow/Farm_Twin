@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.enums import (
     ActuatorMode,
@@ -88,6 +88,16 @@ class ActuatorSummary(BaseModel):
     actuator_type: ActuatorType
     mode: ActuatorMode
     output_ratio: float
+
+
+class ManualActuatorSet(BaseModel):
+    """
+    운영자 수동 출력 설정 (트윈 대시보드).
+
+    output_ratio=0 → mode=OFF, 그 외 → mode=MANUAL.
+    """
+
+    output_ratio: float = Field(ge=0.0, le=1.0)
 
 
 class FarmStateOut(BaseModel):

@@ -14,6 +14,7 @@ export const realtimeEventTypeSchema = z.enum([
   'connection.ready',
   'farm_state.updated',
   'simulation.status',
+  'actuator.updated',
 ])
 
 export const eventEnvelopeSchema = z.object({

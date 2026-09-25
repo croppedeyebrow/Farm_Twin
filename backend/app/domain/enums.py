@@ -116,6 +116,7 @@ class ActuatorMode(StrEnum):
     OFF = "off"
     ON = "on"
     AUTO = "auto"
+    MANUAL = "manual"  # 운영자 UI 점유 — 자동 규칙 START/STOP 강등용 (Day14 게이트와 정렬)
 
 
 class SimulationStatus(StrEnum):

@@ -180,6 +180,49 @@ async def list_farm_actuators(
     return [ActuatorSummary.model_validate(item) for item in actuators]
 
 
+async def set_actuator_manual(
+    session: AsyncSession,
+    actuator_id: uuid.UUID,
+    *,
+    output_ratio: float,
+) -> ActuatorSummary:
+    """
+    운영자 수동 출력 설정.
+
+    - DB actuators 캐시 갱신 후 commit
+    - WS actuator.updated 푸시 (commit-then-push)
+    - ControlCommand 이력은 run 필수라 MVP 에서는 WS/타임라인 로컬로 대체
+    """
+    from app.domain.enums import ActuatorMode
+    from app.websocket.publisher import publish_actuator_updated
+
+    actuator = await session.get(Actuator, actuator_id)
+    if actuator is None:
+        raise HTTPException(status_code=404, detail="actuator not found")
+
+    room = await session.get(Room, actuator.room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="room not found for actuator")
+
+    if output_ratio <= 0.0:
+        actuator.mode = ActuatorMode.OFF
+        actuator.output_ratio = 0.0
+    else:
+        actuator.mode = ActuatorMode.MANUAL
+        actuator.output_ratio = output_ratio
+
+    await session.commit()
+    await session.refresh(actuator)
+
+    summary = ActuatorSummary.model_validate(actuator)
+    await publish_actuator_updated(
+        farm_id=room.farm_id,
+        room_id=room.id,
+        actuator_payload=summary.model_dump(mode="json"),
+    )
+    return summary
+
+
 async def list_farm_control_events(
     session: AsyncSession,
     farm_id: uuid.UUID,

@@ -11,7 +11,8 @@
  *
  * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png, strawberry line.png
  * 작물 GLB: public/models/strawberry-set.glb, grape.glb
- * 센서 GLB: public/models/temp-moisture-sensor.glb (온·습도·배지)
+ * 센서 GLB: public/models/temp-moisture-sensor.glb (온습도계 바 장착)
+ * 계측 배치: 입구 CO₂ · 온습도계 · 영양 프로브 · PPFD 미터 · LED 패널
  */
 
 import { OrbitControls } from '@react-three/drei'
@@ -20,6 +21,7 @@ import { Suspense } from 'react'
 
 import { useRealtimeStore } from '../store/realtimeStore'
 import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
+import { EntranceDoors } from './EntranceDoors'
 import { GrapeCorridor } from './GrapeCorridor'
 import { GreenhouseShell } from './GreenhouseShell'
 import { GRAPE_CORRIDOR_PLACEMENTS, STRAWBERRY_ROW_X } from './rackLayout'
@@ -56,16 +58,31 @@ export function GrowingRoomScene() {
       <ambientLight intensity={0.65} />
       <directionalLight position={[10, 14, 6]} intensity={1.25} castShadow />
       <hemisphereLight args={['#e8f4ff', '#c4b59a', 0.5]} />
-      {led > 0 ? (
-        <pointLight
-          position={[1.2, 2.6, 0]}
-          intensity={led * 2.0}
-          color="#ffe066"
-          distance={10}
-        />
-      ) : null}
+      {led > 0
+        ? STRAWBERRY_ROW_X.map((x, i) => (
+            <pointLight
+              key={`led-light-${i}`}
+              position={[x, 2.35, 0]}
+              intensity={led * 0.95}
+              color="#ff9ecd"
+              distance={6.5}
+            />
+          ))
+        : null}
+      {led > 0
+        ? STRAWBERRY_ROW_X.map((x, i) => (
+            <pointLight
+              key={`led-light-w-${i}`}
+              position={[x, 2.2, 1.2]}
+              intensity={led * 0.55}
+              color="#e7f5ff"
+              distance={5}
+            />
+          ))
+        : null}
 
       <GreenhouseShell />
+      <EntranceDoors />
 
       {/* 포도 — 좌측 스팬 + 중앙 공백 (주석: 포도 추가) */}
       {GRAPE_CORRIDOR_PLACEMENTS.map((g) => (

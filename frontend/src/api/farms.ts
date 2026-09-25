@@ -99,3 +99,25 @@ export async function fetchFarmEvents(
   }
   return (await response.json()) as ControlEventOut[]
 }
+
+/**
+ * POST /api/actuators/{id}/manual
+ * 운영자 수동 출력 (LED 조도 등). commit 후 WS actuator.updated.
+ */
+export async function setActuatorManual(
+  actuatorId: string,
+  outputRatio: number,
+): Promise<ActuatorSummary> {
+  const response = await fetch(`/api/actuators/${actuatorId}/manual`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ output_ratio: outputRatio }),
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as
+      | { detail?: string }
+      | null
+    throw new Error(body?.detail ?? `manual ${response.status}`)
+  }
+  return (await response.json()) as ActuatorSummary
+}

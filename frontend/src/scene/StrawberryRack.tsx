@@ -12,6 +12,7 @@ import {
   STRAWBERRY_SEGMENT_LENGTH,
   StrawberryRowSegment,
 } from './CropModel'
+import { GrowLightStrip } from './GrowLightStrip'
 import { GUTTER_HEIGHT, GUTTER_LENGTH } from './rackLayout'
 
 type StrawberryRackProps = {
@@ -104,14 +105,10 @@ export function StrawberryRack({
         <meshStandardMaterial color="#1a1a1a" roughness={0.7} />
       </mesh>
 
-      <mesh position={[0, gutterY + 0.72, 0]}>
-        <boxGeometry args={[0.14, 0.04, length * 0.92]} />
-        <meshStandardMaterial
-          color="#fff9db"
-          emissive="#ffd43b"
-          emissiveIntensity={0.12 + ledRatio * 1.5}
-        />
-      </mesh>
+      {/* 거터 위 멀티스펙트럼 생장 LED (레퍼런스 다이오드 스트립) */}
+      <group position={[0, gutterY + 0.78, 0]}>
+        <GrowLightStrip length={length} ledRatio={ledRatio} />
+      </group>
 
       {hangers.map((z) => (
         <VHanger key={`${label}-h-${z}`} z={z} gutterY={gutterY} />

@@ -158,3 +158,20 @@ async def publish_simulation_status(
         payload=run.model_dump(mode="json"),
         manager=manager,
     )
+
+
+async def publish_actuator_updated(
+    *,
+    farm_id: uuid.UUID,
+    room_id: uuid.UUID,
+    actuator_payload: dict[str, Any],
+    manager: ConnectionManager | None = None,
+) -> int:
+    """수동 제어 등 Actuator 캐시 commit 이후 이벤트."""
+    return await publish_event(
+        farm_id=farm_id,
+        event_type=RealtimeEventType.ACTUATOR_UPDATED,
+        room_id=room_id,
+        payload=actuator_payload,
+        manager=manager,
+    )

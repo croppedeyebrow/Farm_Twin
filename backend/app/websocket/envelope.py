@@ -67,6 +67,8 @@ class RealtimeEventType(StrEnum):
     FARM_STATE_UPDATED = "farm_state.updated"
     # start/pause/resume/stop commit 후 — SimulationRunOut
     SIMULATION_STATUS = "simulation.status"
+    # 수동 제어 UI 등 — Actuator 운전 캐시 갱신
+    ACTUATOR_UPDATED = "actuator.updated"
 
 
 class EventEnvelope(BaseModel):
