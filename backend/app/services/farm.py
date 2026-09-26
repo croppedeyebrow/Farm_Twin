@@ -38,12 +38,16 @@ from app.schemas.farm import (
     FarmSnapshot,
     FarmStateOut,
     FarmSummary,
+    FarmZonesOut,
     RackSummary,
     RoomSummary,
     SensorReadingOut,
     SensorSummary,
+    ZoneStateOut,
 )
+from app.services.zone_runtime import zones_payload
 from app.websocket.manager import get_connection_manager
+from app.domain.simulation.state import EnvironmentState
 
 
 async def list_farms(session: AsyncSession) -> list[FarmSummary]:
@@ -96,6 +100,27 @@ async def get_farm_snapshot(session: AsyncSession, farm_id: uuid.UUID) -> FarmSn
     # Day 17: 관제 스트림 정렬 기준 (commit-then-push 로 발급된 마지막 번호)
     stream_sequence = get_connection_manager().last_sequence(farm_id)
 
+    zones_out: FarmZonesOut | None = None
+    if state is not None:
+        room_env = EnvironmentState(
+            temperature_c=state.temperature_c,
+            humidity_pct=state.humidity_pct,
+            co2_ppm=state.co2_ppm,
+            substrate_moisture_pct=state.substrate_moisture_pct,
+            ppfd_umol=state.ppfd_umol,
+            simulation_time=state.simulation_time,
+        )
+        raw = zones_payload(farm_id, room_env)
+        zones_out = FarmZonesOut(
+            strawberry=ZoneStateOut.model_validate(raw["strawberry"]),
+            grape=ZoneStateOut.model_validate(raw["grape"]),
+            disease_mitigation_active=bool(raw.get("disease_mitigation_active", False)),
+            led_demand_ratio=float(raw.get("led_demand_ratio", 0.0)),
+            last_irrigation_reason=str(raw.get("last_irrigation_reason", "")),
+            last_disease_reason=str(raw.get("last_disease_reason", "")),
+            last_led_reason=str(raw.get("last_led_reason", "")),
+        )
+
     return FarmSnapshot(
         farm=FarmSummary.model_validate(farm),
         room=RoomSummary.model_validate(room),
@@ -103,6 +128,7 @@ async def get_farm_snapshot(session: AsyncSession, farm_id: uuid.UUID) -> FarmSn
         sensors=[SensorSummary.model_validate(sensor) for sensor in sensors],
         actuators=[ActuatorSummary.model_validate(actuator) for actuator in actuators],
         state=FarmStateOut.model_validate(state) if state else None,
+        zones=zones_out,
         stream_sequence=stream_sequence,
     )
 

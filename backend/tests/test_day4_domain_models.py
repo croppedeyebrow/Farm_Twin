@@ -50,10 +50,14 @@ def test_site_has_postgis_geography() -> None:
 
 
 def test_actuator_types_match_product_scope() -> None:
-    assert set(ActuatorType) == {
+    assert {
         ActuatorType.HVAC,
         ActuatorType.VENTILATION_FAN,
         ActuatorType.DEHUMIDIFIER,
         ActuatorType.IRRIGATION_PUMP,
         ActuatorType.LED,
-    }
+    } <= set(ActuatorType)
+    # crop-zone MVP
+    assert ActuatorType.ZONE_VALVE_STRAWBERRY in ActuatorType
+    assert ActuatorType.ZONE_VALVE_GRAPE in ActuatorType
+    assert ActuatorType.CIRCULATION_FAN in ActuatorType

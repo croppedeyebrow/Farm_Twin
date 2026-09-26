@@ -22,6 +22,7 @@ import type {
   ControlEventOut,
   FarmSnapshot,
   FarmStateSnapshot,
+  FarmZonesSnapshot,
   SensorSummary,
 } from '../api/farms'
 import type { SocketStatus } from '../realtime/farmSocket'
@@ -50,6 +51,7 @@ export type RealtimeStore = {
   stale: boolean
   snapshot: FarmSnapshot | null
   state: FarmStateSnapshot | null
+  zones: FarmZonesSnapshot | null
   sensors: SensorSummary[]
   actuators: ActuatorSummary[]
   kpiHistory: KpiSample[]
@@ -128,6 +130,7 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
   stale: false,
   snapshot: null,
   state: null,
+  zones: null,
   sensors: [],
   actuators: [],
   kpiHistory: [],
@@ -172,6 +175,7 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
       return {
         snapshot,
         state: snapshot.state,
+        zones: snapshot.zones ?? null,
         sensors: snapshot.sensors,
         actuators: snapshot.actuators,
         lastSequence: snapshot.stream_sequence,

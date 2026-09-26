@@ -69,6 +69,7 @@ from app.domain.simulation.state import (
 )
 from app.domain.simulation.weather import create_weather_adapter
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
+from app.services.zone_runtime import advance_zones
 from app.websocket.publisher import (
     publish_farm_state_updated,
     publish_simulation_status,
@@ -248,6 +249,13 @@ async def _load_actuator_inputs(
         "dehumidifier": 0.0,
         "irrigation_pump": 0.0,
         "led": 0.0,
+        "circulation_fan": 0.0,
+        "humidifier": 0.0,
+        "zone_valve_strawberry": 0.0,
+        "zone_valve_grape": 0.0,
+        "dosing_pump": 0.0,
+        "shade_curtain": 0.0,
+        "vent_motor": 0.0,
     }
     type_to_field = {
         "hvac": "hvac",
@@ -255,9 +263,18 @@ async def _load_actuator_inputs(
         "dehumidifier": "dehumidifier",
         "irrigation_pump": "irrigation_pump",
         "led": "led",
+        "circulation_fan": "circulation_fan",
+        "humidifier": "humidifier",
+        "zone_valve_strawberry": "zone_valve_strawberry",
+        "zone_valve_grape": "zone_valve_grape",
+        "dosing_pump": "dosing_pump",
+        "shade_curtain": "shade_curtain",
+        "vent_motor": "vent_motor",
     }
     for actuator in actuators:
-        field = type_to_field[actuator.actuator_type.value]
+        field = type_to_field.get(actuator.actuator_type.value)
+        if field is None:
+            continue
         if actuator.mode is ActuatorMode.OFF:
             continue
         ratios[field] = max(ratios[field], actuator.output_ratio)
@@ -419,6 +436,16 @@ async def step_run(
         # ① 참값 커밋 대상 갱신 (측정 전)
         _apply_environment_to_farm_state(farm_state, env, run_id=run.id)
         run.simulation_time_seconds = env.simulation_time
+
+        # ①-b 작물 구역 전진 (관수·병해완화·LED/DLI 폐쇄루프)
+        # 목적: 룸 FarmState 커밋 직후 구역 캐시를 같은 dt 로 맞춘다.
+        # 이유: snapshot.zones 가 시뮬 시각과 어긋나면 관제 UI 인과가 깨진다.
+        advance_zones(
+            run.farm_id,
+            room=env,
+            actuators=actuators,
+            dt_seconds=dt_seconds,
+        )
 
         # ② 측정은 참값 env 를 읽기만 한다
         if persist_readings:

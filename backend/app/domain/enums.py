@@ -23,12 +23,39 @@ PostgreSQL native ENUM 타입은 쓰지 않는다.
 from enum import StrEnum
 
 
+class CropKind(StrEnum):
+    """
+    작물 종류.
+
+    목적: 구역 프로필·생육 점수·추정 Brix 기준값을 가르는 키.
+    이유: 딸기/포도를 문자열 ad-hoc 비교하면 setpoint 분리가 깨지기 쉽다.
+    """
+
+    STRAWBERRY = "strawberry"
+    GRAPE = "grape"
+
+
+class ZoneId(StrEnum):
+    """
+    Farm 내부 재배 구역 ID.
+
+    목적: strawberry_zone / grape_zone 을 API·도메인·UI가 같은 문자열로 공유.
+    이유: 한 룸 안에서도 관수 밸브·병해 규칙을 구역 단위로 분리해야 함.
+    """
+
+    STRAWBERRY = "strawberry_zone"
+    GRAPE = "grape_zone"
+
+
 class SensorType(StrEnum):
     """
     가상 센서 종류.
 
-    기획 문서의 실내 측정 항목과 1:1.
+    룸 공통 5종 + 구역 MVP 확장(배지 EC/온도·양액 pH·엽면습윤·유량).
     `units.SENSOR_DEFAULT_UNIT` / `SENSOR_VALUE_RANGE` 키로도 사용한다.
+
+    확장 이유: 온·습·배지수분만으로는 VPD/DLI/병해/양액 폐쇄루프를
+    구성할 수 없다 (작물 구역 설계 문서 §1·§5).
     """
 
     TEMPERATURE = "temperature"
@@ -36,6 +63,12 @@ class SensorType(StrEnum):
     CO2 = "co2"
     SUBSTRATE_MOISTURE = "substrate_moisture"
     PPFD = "ppfd"  # Photosynthetic Photon Flux Density
+    # --- crop-zone MVP: 근권·양액·병해·관수 검증 ---
+    SUBSTRATE_EC = "substrate_ec"  # 비료 농도 / 염류
+    SUBSTRATE_TEMPERATURE = "substrate_temperature"  # 근권 냉난·관수 보정
+    NUTRIENT_PH = "nutrient_ph"  # 산·알칼리 도징
+    LEAF_WETNESS = "leaf_wetness"  # 누적 분 — Botrytis 등 병해 입력
+    IRRIGATION_FLOW = "irrigation_flow"  # L/min — 관수 검증·누수
 
 
 class ActuatorType(StrEnum):
@@ -43,6 +76,7 @@ class ActuatorType(StrEnum):
     가상 액추에이터 종류.
 
     ControlRule.target_actuator_type / ControlCommand 대상 설비와 대응한다.
+    구역 밸브·순환팬·도징·차광·천창은 작물 구역 폐쇄루프 MVP용.
     """
 
     HVAC = "hvac"  # 냉난방기
@@ -50,6 +84,14 @@ class ActuatorType(StrEnum):
     DEHUMIDIFIER = "dehumidifier"
     IRRIGATION_PUMP = "irrigation_pump"
     LED = "led"
+    # --- crop-zone MVP ---
+    CIRCULATION_FAN = "circulation_fan"  # 수관·결로 / 병해 완화
+    HUMIDIFIER = "humidifier"
+    ZONE_VALVE_STRAWBERRY = "zone_valve_strawberry"  # 딸기만 관수
+    ZONE_VALVE_GRAPE = "zone_valve_grape"
+    DOSING_PUMP = "dosing_pump"  # A/B·산·알칼리 (MVP 단일)
+    SHADE_CURTAIN = "shade_curtain"
+    VENT_MOTOR = "vent_motor"  # 천창·측창·문 개도
 
 
 class Unit(StrEnum):
@@ -58,6 +100,7 @@ class Unit(StrEnum):
 
     정규화 후 저장 단위는 CELSIUS / PERCENT / PPM / MICROMOLE_PER_M2_S 등.
     FAHRENHEIT 는 ingest 입력용이며 저장 `unit` 으로는 쓰지 않는다.
+    EC/pH/분/유량/VPD/DLI 단위는 구역 MVP·파생값용.
     """
 
     CELSIUS = "C"
@@ -67,6 +110,12 @@ class Unit(StrEnum):
     MICROMOLE_PER_M2_S = "umol/m2/s"  # PPFD
     RATIO = "ratio"  # 0~1 출력 비율 (액추에이터 duty 등)
     ON_OFF = "on_off"  # 0/1
+    MS_PER_CM = "mS/cm"  # EC
+    PH = "pH"
+    MINUTES = "min"
+    LITER_PER_MIN = "L/min"
+    KPA = "kPa"  # VPD 등 파생값
+    MOL_PER_M2_DAY = "mol/m2/d"  # DLI
 
 
 class ReadingQuality(StrEnum):

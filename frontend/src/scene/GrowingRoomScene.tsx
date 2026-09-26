@@ -5,11 +5,12 @@
  * 구성 (레퍼런스 반영)
  * -----------------------------------------------------------------------------
  * - GreenhouseShell: 멀티스팬 아치 외피·골조·기초·천장 그리드
- * - GrapeCorridor ×2: 좌측·중앙 포도
+ * - GrapeCorridor ×2: 좌측·중앙 포도 (아치 수관·송이 봉지·흑멀칭·점적)
  * - StrawberryRack ×4: 중앙~우측 딸기 (벽 안쪽)
  * - SensorMarkers / ActuatorVisuals
  *
- * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png, strawberry line.png
+ * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png,
+ *           strawberry line.png, grape_arched_trellis_ref.png
  * 작물 GLB: public/models/strawberry-set.glb, grape.glb
  * 센서 GLB: public/models/temp-moisture-sensor.glb (온습도계 바 장착)
  * 계측 배치: 입구 CO₂ · 온습도계 · 영양 프로브 · PPFD 미터 · LED 패널

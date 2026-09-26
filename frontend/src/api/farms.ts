@@ -25,6 +25,44 @@ export type FarmStateSnapshot = {
   updated_at: string
 }
 
+/** 작물 구역 참값·파생 (딸기/포도 분리). estimated_brix는 추정값. */
+export type ZoneStateSnapshot = {
+  zone_id: string
+  crop: string
+  label: string
+  air_temperature_c: number
+  relative_humidity_pct: number
+  co2_ppm: number
+  ppfd: number
+  vpd_kpa: number
+  dli_today: number
+  substrate_vwc_pct: number
+  substrate_ec: number
+  substrate_temperature_c: number
+  nutrient_ph: number
+  nutrient_ec: number
+  leaf_wetness_minutes: number
+  irrigation_flow_lpm: number
+  drainage_ratio_pct: number
+  water_stress_score: number
+  disease_risk_score: number
+  fruit_maturity_score: number
+  estimated_brix: number
+  irrigation_valve_open: boolean
+  simulation_time: number
+}
+
+/** Farm 구역 묶음 + 공유 제어 요구(병해완화·LED/DLI) */
+export type FarmZonesSnapshot = {
+  strawberry: ZoneStateSnapshot
+  grape: ZoneStateSnapshot
+  disease_mitigation_active?: boolean
+  led_demand_ratio?: number
+  last_irrigation_reason?: string
+  last_disease_reason?: string
+  last_led_reason?: string
+}
+
 export type SensorSummary = {
   id: string
   room_id: string
@@ -52,6 +90,7 @@ export type FarmSnapshot = {
   sensors: SensorSummary[]
   actuators: ActuatorSummary[]
   state: FarmStateSnapshot | null
+  zones: FarmZonesSnapshot | null
   /** Day 17: 이 API 프로세스가 발급한 마지막 WS sequence */
   stream_sequence: number
 }

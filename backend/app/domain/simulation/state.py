@@ -140,6 +140,14 @@ class ActuatorInputs:
     dehumidifier: float = 0.0
     irrigation_pump: float = 0.0
     led: float = 0.0
+    # crop-zone MVP — 기본 0 이라 기존 룸 식/테스트는 그대로 통과
+    circulation_fan: float = 0.0  # 병해 완화·수관 유동
+    humidifier: float = 0.0
+    zone_valve_strawberry: float = 0.0  # 딸기 개별 관수
+    zone_valve_grape: float = 0.0
+    dosing_pump: float = 0.0
+    shade_curtain: float = 0.0
+    vent_motor: float = 0.0  # 천창·측창 개도
 
     def __post_init__(self) -> None:
         for name in (
@@ -148,6 +156,13 @@ class ActuatorInputs:
             "dehumidifier",
             "irrigation_pump",
             "led",
+            "circulation_fan",
+            "humidifier",
+            "zone_valve_strawberry",
+            "zone_valve_grape",
+            "dosing_pump",
+            "shade_curtain",
+            "vent_motor",
         ):
             value = getattr(self, name)
             if not 0.0 <= value <= 1.0:
@@ -158,7 +173,7 @@ class ActuatorInputs:
         """
         개별 설비 스냅샷 → 타입별 실효 출력.
 
-        동일 타입 여러 대: max (가장 강하게 켜진 것). 
+        동일 타입 여러 대: max (가장 강하게 켜진 것).
         합산(sum) 하면 1을 넘기기 쉬워 MVP 에선 max 가 안전하다.
         """
         ratios: dict[ActuatorType, float] = {item: 0.0 for item in ActuatorType}
@@ -171,4 +186,11 @@ class ActuatorInputs:
             dehumidifier=ratios[ActuatorType.DEHUMIDIFIER],
             irrigation_pump=ratios[ActuatorType.IRRIGATION_PUMP],
             led=ratios[ActuatorType.LED],
+            circulation_fan=ratios[ActuatorType.CIRCULATION_FAN],
+            humidifier=ratios[ActuatorType.HUMIDIFIER],
+            zone_valve_strawberry=ratios[ActuatorType.ZONE_VALVE_STRAWBERRY],
+            zone_valve_grape=ratios[ActuatorType.ZONE_VALVE_GRAPE],
+            dosing_pump=ratios[ActuatorType.DOSING_PUMP],
+            shade_curtain=ratios[ActuatorType.SHADE_CURTAIN],
+            vent_motor=ratios[ActuatorType.VENT_MOTOR],
         )

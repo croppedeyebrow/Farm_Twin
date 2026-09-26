@@ -139,6 +139,56 @@ class SensorReadingOut(BaseModel):
     ingested_at: datetime
 
 
+class ZoneStateOut(BaseModel):
+    """
+    작물 구역 참값·파생 요약.
+
+    목적: 딸기/포도 setpoint·근권·병해·추정 Brix를 룸 KPI와 분리해 UI에 노출.
+    estimated_brix 는 추정 — 실측 당도와 혼동 금지.
+    """
+
+    zone_id: str
+    crop: str
+    label: str
+    air_temperature_c: float
+    relative_humidity_pct: float
+    co2_ppm: float
+    ppfd: float
+    vpd_kpa: float
+    dli_today: float
+    substrate_vwc_pct: float
+    substrate_ec: float
+    substrate_temperature_c: float
+    nutrient_ph: float
+    nutrient_ec: float
+    leaf_wetness_minutes: float
+    irrigation_flow_lpm: float
+    drainage_ratio_pct: float
+    water_stress_score: float
+    disease_risk_score: float
+    fruit_maturity_score: float
+    estimated_brix: float
+    irrigation_valve_open: bool
+    simulation_time: float
+
+
+class FarmZonesOut(BaseModel):
+    """
+    Farm 내 재배 구역 묶음 + 공유 제어 요구.
+
+    disease_mitigation_active / led_demand_ratio 는 구역 루프가 낸
+    설비 요구(max-merge 전 요약)이다.
+    """
+
+    strawberry: ZoneStateOut
+    grape: ZoneStateOut
+    disease_mitigation_active: bool = False
+    led_demand_ratio: float = 0.0
+    last_irrigation_reason: str = ""
+    last_disease_reason: str = ""
+    last_led_reason: str = ""
+
+
 class FarmSnapshot(BaseModel):
     """
     관제 초기·복구용 통합 스냅샷 (2단계 Day 7, 5단계 Day 17 확장).
@@ -161,6 +211,7 @@ class FarmSnapshot(BaseModel):
     sensors: list[SensorSummary]
     actuators: list[ActuatorSummary]
     state: FarmStateOut | None
+    zones: FarmZonesOut | None = None
     # Day 17: WS 스트림 정렬용 (없으면 클라가 connection.ready 만으로도 동작 가능)
     stream_sequence: int = 0
 

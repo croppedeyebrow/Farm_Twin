@@ -425,6 +425,81 @@
   grid-template-columns: minmax(0, 1.55fr) minmax(16rem, 0.9fr);
 }
 
+.ops-bottom-stack {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.ops-zone-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.ops-zone-dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid #1f2838;
+}
+
+.ops-zone-dl dt {
+  color: #7a8494;
+}
+
+.ops-zone-dl dd {
+  margin: 0;
+  font-weight: 650;
+  color: #f4f7fb;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-zone-dl dd[data-on='true'] {
+  color: #3dd68c;
+}
+
+.ops-zone-dl dd[data-on='false'] {
+  color: #7a8494;
+}
+
+.ops-est-tag {
+  margin-left: 0.35rem;
+  font-style: normal;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: #fcc419;
+}
+
+.ops-zone-loop-status {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #8b95a5;
+}
+
+.ops-zone-loop-status strong {
+  color: #c5ccd6;
+}
+
+.ops-zone-loop-status strong[data-on='true'] {
+  color: #3dd68c;
+}
+
+.ops-zone-reasons {
+  margin: 0.55rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: #6b7585;
+}
+
 .ops-panel {
   padding: 0.9rem 1rem;
   background: #171e2a;
