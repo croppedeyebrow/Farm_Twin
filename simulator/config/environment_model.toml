@@ -6,12 +6,14 @@
 # --- 온도 [°C/s 또는 1/s] ---
 temp_outdoor_leak_per_s = 0.000555556   # 1/1800
 temp_hvac_cool_per_s = 0.004
+temp_hvac_heat_per_s = 0.004
 temp_led_heat_per_s = 0.0015
 temp_vent_mix_per_s = 0.001666667        # 1/600
 
 # --- 습도 [%RH/s 또는 1/s] ---
 humidity_outdoor_leak_per_s = 0.000555556
 humidity_dehumidifier_per_s = 0.01
+humidity_humidifier_per_s = 0.01
 humidity_vent_mix_per_s = 0.001666667
 humidity_irrigation_per_s = 0.002
 

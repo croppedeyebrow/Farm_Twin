@@ -51,6 +51,15 @@ def _clamp(value: float, low: float, high: float) -> float:
     return min(high, max(low, value))
 
 
+def _opening_ratio(actuators: ActuatorInputs) -> float:
+    """
+    외기 혼합에 쓰는 개구·환기 실효비 [0,1].
+
+    팬 + 천창/측창(vent_motor). 합이 1을 넘지 않게 clamp.
+    """
+    return min(1.0, actuators.ventilation_fan + 0.85 * actuators.vent_motor)
+
+
 def step_temperature(
     temperature_c: float,
     *,
@@ -66,44 +75,41 @@ def step_temperature(
     연속 시간 식 (개념)
     ---------------------------------------------------------------------------
         dT/dt = k_leak · (T_out − T)          # 벽·틈새 수동 열교환
-              + k_vent · u_fan · (T_out − T)  # 환기로 외기 혼합 가속
-              − k_cool · u_hvac               # HVAC 냉방 (강제 하강항)
-              + k_led  · u_led                # LED 발열 (강제 상승항)
+              + k_vent · u_open · (T_out − T) # 환기·천창으로 외기 혼합
+              − k_cool · u_hvac               # 냉방
+              + k_heat · u_heater             # 난방
+              + k_led  · u_led                # LED 발열
 
     근거
     ----
     - (T_out − T) 항: 뉴턴 냉각/가열에 해당하는 **1차 혼합**.
       외기와 실내 차이가 클수록 변화율이 커지고, 같아지면 0.
       k_leak ≈ 1/τ 이고 τ=1800s 이면 "시정수 약 30분" 느낌의 느린 추적.
-    - 환기: 같은 형태의 차를 fan 출력으로 스케일. 팬을 켤수록 외기에 빨리 수렴.
-    - HVAC: MVP 는 **냉방 시나리오** 중심이라 목표온도 추적 대신
-      출력에 비례한 음의 상수항으로 단순화 (고온→규칙→냉방 데모에 충분).
-    - LED: 광원의 상당 에너지가 열로 전환된다는 관찰을 양의 상수항으로 반영.
-      (PPFD 자체는 Day 10. 여기서는 열 부작용만.)
+    - 환기·천창: 같은 형태의 차를 개구 실효비로 스케일.
+    - HVAC/Heater: 목표온도 추적 대신 출력 비례 강제항 (관제 데모용).
+    - LED: 광원 열 부작용.
 
     이산
     ----
-        T' = T + Δt · (leak + vent + cool + heat)
+        T' = T + Δt · (leak + vent + cool + heat + led)
     """
     if dt_seconds < 0:
         raise ValueError("dt_seconds must be >= 0")
     if dt_seconds == 0:
         return temperature_c
 
-    # 수동 누설: 외기 쪽으로 지수적으로 끌려가는 힘
+    opening = _opening_ratio(actuators)
     leak = params.temp_outdoor_leak_per_s * (outdoor_temperature_c - temperature_c)
-    # 환기 ON 시 같은 방향의 혼합을 가속 (u_fan ∈ [0,1])
     vent = (
         params.temp_vent_mix_per_s
-        * actuators.ventilation_fan
+        * opening
         * (outdoor_temperature_c - temperature_c)
     )
-    # 냉방: 외기 차와 무관하게 실내를 내리는다 (MVP 단순화)
     cool = -params.temp_hvac_cool_per_s * actuators.hvac
-    # LED 발열
-    heat = params.temp_led_heat_per_s * actuators.led
+    heat = params.temp_hvac_heat_per_s * actuators.heater
+    led_heat = params.temp_led_heat_per_s * actuators.led
 
-    next_t = temperature_c + dt_seconds * (leak + vent + cool + heat)
+    next_t = temperature_c + dt_seconds * (leak + vent + cool + heat + led_heat)
     return _clamp(next_t, params.temperature_min_c, params.temperature_max_c)
 
 
@@ -122,41 +128,41 @@ def step_humidity(
     연속 시간 식 (개념)
     ---------------------------------------------------------------------------
         dH/dt = k_leak · (H_out − H)
-              + k_vent · u_fan · (H_out − H)
-              − k_dehum · u_dehumidifier      # 제습
-              + k_irr   · u_irrigation        # 관수로 인한 약가습
+              + k_vent · u_open · (H_out − H)
+              − k_dehum · u_dehumidifier
+              + k_hum   · u_humidifier
+              + k_irr   · u_irrigation
 
     근거
     ----
     - 절대습도·노점·잠열을 풀지 않고 **상대습도 스칼라**만 다룬다.
-      (교육·관제 데모용. 정밀 HVAC psychrometric 은 후속.)
-    - 외기 혼합은 온도와 같은 1차 형태 → "환기하면 외기 RH 쪽으로 간다".
-    - 제습기: 출력에 비례해 RH 를 낮추는 강제항 (실기기 제습량 근사).
-    - 관수: Day 10 배지 수분과 본격 연계 전, 공기 중 수분 증가를 약하게 표현.
+    - 외기 혼합은 온도와 같은 1차 형태.
+    - 제습/가습: 출력 비례 강제항.
+    - 관수: 배지 증발의 약식 가습.
 
     이산
     ----
-        H' = H + Δt · (leak + vent + dry + wet)
+        H' = H + Δt · (leak + vent + dry + humid + wet)
     """
     if dt_seconds < 0:
         raise ValueError("dt_seconds must be >= 0")
     if dt_seconds == 0:
         return humidity_pct
 
+    opening = _opening_ratio(actuators)
     leak = params.humidity_outdoor_leak_per_s * (
         outdoor_humidity_pct - humidity_pct
     )
     vent = (
         params.humidity_vent_mix_per_s
-        * actuators.ventilation_fan
+        * opening
         * (outdoor_humidity_pct - humidity_pct)
     )
-    # 제습: RH 감소 방향
     dry = -params.humidity_dehumidifier_per_s * actuators.dehumidifier
-    # 관수: RH 소폭 증가 (배지 증발의 약식)
+    humid = params.humidity_humidifier_per_s * actuators.humidifier
     wet = params.humidity_irrigation_per_s * actuators.irrigation_pump
 
-    next_h = humidity_pct + dt_seconds * (leak + vent + dry + wet)
+    next_h = humidity_pct + dt_seconds * (leak + vent + dry + humid + wet)
     return _clamp(next_h, params.humidity_min_pct, params.humidity_max_pct)
 
 
@@ -290,10 +296,10 @@ def step_co2(
     else:
         light_factor = actuators.led
     uptake = -params.co2_plant_uptake_per_s * light_factor
-    # 환기 혼합: C_out 쪽으로
+    # 환기·천창 혼합: C_out 쪽으로
     vent = (
         params.co2_vent_mix_per_s
-        * actuators.ventilation_fan
+        * _opening_ratio(actuators)
         * (outdoor_co2_ppm - co2_ppm)
     )
 

@@ -136,6 +136,7 @@ class ActuatorInputs:
     """
 
     hvac: float = 0.0
+    heater: float = 0.0
     ventilation_fan: float = 0.0
     dehumidifier: float = 0.0
     irrigation_pump: float = 0.0
@@ -152,6 +153,7 @@ class ActuatorInputs:
     def __post_init__(self) -> None:
         for name in (
             "hvac",
+            "heater",
             "ventilation_fan",
             "dehumidifier",
             "irrigation_pump",
@@ -182,6 +184,7 @@ class ActuatorInputs:
             ratios[command.actuator_type] = max(current, command.effective_ratio)
         return cls(
             hvac=ratios[ActuatorType.HVAC],
+            heater=ratios[ActuatorType.HEATER],
             ventilation_fan=ratios[ActuatorType.VENTILATION_FAN],
             dehumidifier=ratios[ActuatorType.DEHUMIDIFIER],
             irrigation_pump=ratios[ActuatorType.IRRIGATION_PUMP],

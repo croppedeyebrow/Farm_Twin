@@ -79,7 +79,8 @@ class ActuatorType(StrEnum):
     구역 밸브·순환팬·도징·차광·천창은 작물 구역 폐쇄루프 MVP용.
     """
 
-    HVAC = "hvac"  # 냉난방기
+    HVAC = "hvac"  # 냉방 (냉각 코일)
+    HEATER = "heater"  # 난방 — HVAC 와 분리해 수동 냉/난 동시 제어
     VENTILATION_FAN = "ventilation_fan"
     DEHUMIDIFIER = "dehumidifier"
     IRRIGATION_PUMP = "irrigation_pump"

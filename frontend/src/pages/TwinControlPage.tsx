@@ -30,7 +30,9 @@ export function TwinControlPage() {
         <header className="page-header page-header-compact">
           <div>
             <h1>장치 제어</h1>
-            <p className="lede">LED·입구 문 등 트윈에 즉시 반영됩니다.</p>
+            <p className="lede">
+              LED·냉난방·가습·관수 등 수동 출력이 시뮬과 3D에 반영됩니다.
+            </p>
           </div>
         </header>
         <div className="page-stack">

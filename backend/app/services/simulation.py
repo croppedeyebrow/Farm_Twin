@@ -245,6 +245,7 @@ async def _load_actuator_inputs(
     ).all()
     ratios = {
         "hvac": 0.0,
+        "heater": 0.0,
         "ventilation_fan": 0.0,
         "dehumidifier": 0.0,
         "irrigation_pump": 0.0,
@@ -259,6 +260,7 @@ async def _load_actuator_inputs(
     }
     type_to_field = {
         "hvac": "hvac",
+        "heater": "heater",
         "ventilation_fan": "ventilation_fan",
         "dehumidifier": "dehumidifier",
         "irrigation_pump": "irrigation_pump",

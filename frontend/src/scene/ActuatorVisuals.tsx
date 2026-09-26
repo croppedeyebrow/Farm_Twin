@@ -4,7 +4,7 @@
  * - ventilation_fan: 박공 환기팬
  * - led: StrawberryRack GrowLightStrip
  * - irrigation_pump: 바닥 물줄기
- * - hvac / dehumidifier: 천장 온·습도 조절 카세트 (LED 아님)
+ * - hvac / heater / dehumidifier / humidifier: 천장 온·습도 카세트
  */
 
 import { useFrame } from '@react-three/fiber'
@@ -28,7 +28,6 @@ function ratioOf(
   if (!hit) {
     return { ratio: 0, id: null, mode: 'off' }
   }
-  // OFF 만 출력 0. manual/on/auto 는 output_ratio 사용
   if (hit.mode === 'off' || hit.output_ratio <= 0) {
     return { ratio: 0, id: hit.id, mode: hit.mode }
   }
@@ -78,6 +77,8 @@ function Fan({
   )
 }
 
+type CassetteKind = 'hvac' | 'heater' | 'dehumidifier' | 'humidifier'
+
 function ClimateCassette({
   position,
   active,
@@ -87,12 +88,17 @@ function ClimateCassette({
 }: {
   position: [number, number, number]
   active: boolean
-  kind: 'hvac' | 'dehumidifier'
+  kind: CassetteKind
   selected: boolean
   onSelect: () => void
 }) {
-  const accent = kind === 'hvac' ? '#74c0fc' : '#63e6be'
-  const emissive = kind === 'hvac' ? '#4dabf7' : '#38d9a9'
+  const palette: Record<CassetteKind, { accent: string; emissive: string }> = {
+    hvac: { accent: '#74c0fc', emissive: '#4dabf7' },
+    heater: { accent: '#ff922b', emissive: '#fd7e14' },
+    dehumidifier: { accent: '#63e6be', emissive: '#38d9a9' },
+    humidifier: { accent: '#66d9e8', emissive: '#22b8cf' },
+  }
+  const { accent, emissive } = palette[kind]
   return (
     <group
       position={position}
@@ -135,7 +141,9 @@ export function ActuatorVisuals({
 }: ActuatorVisualsProps) {
   const fan = ratioOf(actuators, 'ventilation_fan')
   const hvac = ratioOf(actuators, 'hvac')
+  const heater = ratioOf(actuators, 'heater')
   const dehum = ratioOf(actuators, 'dehumidifier')
+  const humid = ratioOf(actuators, 'humidifier')
   const irrig = ratioOf(actuators, 'irrigation_pump')
   const climateY = EAVES_HEIGHT - 0.45 - 0.12
 
@@ -160,10 +168,10 @@ export function ActuatorVisuals({
       />
       <ClimateCassette
         position={[0, climateY, 1.0]}
-        active={hvac.ratio > 0}
-        kind="hvac"
-        selected={hvac.id === selectedActuatorId}
-        onSelect={() => hvac.id && onSelect(hvac.id)}
+        active={heater.ratio > 0}
+        kind="heater"
+        selected={heater.id === selectedActuatorId}
+        onSelect={() => heater.id && onSelect(heater.id)}
       />
       <ClimateCassette
         position={[3.8, climateY, 1.0]}
@@ -174,6 +182,13 @@ export function ActuatorVisuals({
       />
       <ClimateCassette
         position={[-3.8, climateY, -2.7]}
+        active={humid.ratio > 0}
+        kind="humidifier"
+        selected={humid.id === selectedActuatorId}
+        onSelect={() => humid.id && onSelect(humid.id)}
+      />
+      <ClimateCassette
+        position={[3.8, climateY, -2.7]}
         active={dehum.ratio > 0}
         kind="dehumidifier"
         selected={dehum.id === selectedActuatorId}

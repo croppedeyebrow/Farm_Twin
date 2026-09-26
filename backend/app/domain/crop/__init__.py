@@ -629,6 +629,7 @@ def merge_actuator_inputs(
     """
     return ActuatorInputs(
         hvac=base.hvac,
+        heater=base.heater,
         ventilation_fan=max(base.ventilation_fan, disease.ventilation_fan),
         dehumidifier=max(base.dehumidifier, disease.dehumidifier),
         irrigation_pump=base.irrigation_pump,

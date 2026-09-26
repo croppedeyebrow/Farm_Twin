@@ -138,6 +138,56 @@ def test_dehumidifier_lowers_humidity() -> None:
     assert on < off
 
 
+def test_heater_raises_temperature() -> None:
+    off = step_temperature(
+        18.0,
+        outdoor_temperature_c=18.0,
+        actuators=ActuatorInputs(),
+        dt_seconds=300.0,
+    )
+    on = step_temperature(
+        18.0,
+        outdoor_temperature_c=18.0,
+        actuators=ActuatorInputs(heater=1.0),
+        dt_seconds=300.0,
+    )
+    assert on > off
+    assert on > 18.0
+
+
+def test_humidifier_raises_humidity() -> None:
+    off = step_humidity(
+        40.0,
+        outdoor_humidity_pct=40.0,
+        actuators=ActuatorInputs(),
+        dt_seconds=300.0,
+    )
+    on = step_humidity(
+        40.0,
+        outdoor_humidity_pct=40.0,
+        actuators=ActuatorInputs(humidifier=1.0),
+        dt_seconds=300.0,
+    )
+    assert on > off
+    assert on > 40.0
+
+
+def test_vent_motor_mixes_like_fan() -> None:
+    sealed = step_temperature(
+        30.0,
+        outdoor_temperature_c=10.0,
+        actuators=ActuatorInputs(),
+        dt_seconds=600.0,
+    )
+    opened = step_temperature(
+        30.0,
+        outdoor_temperature_c=10.0,
+        actuators=ActuatorInputs(vent_motor=1.0),
+        dt_seconds=600.0,
+    )
+    assert opened < sealed
+
+
 def test_ventilation_moves_co2_toward_outdoor() -> None:
     sealed = step_co2(
         1200.0,

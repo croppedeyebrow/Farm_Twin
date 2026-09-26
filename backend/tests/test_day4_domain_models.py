@@ -61,3 +61,5 @@ def test_actuator_types_match_product_scope() -> None:
     assert ActuatorType.ZONE_VALVE_STRAWBERRY in ActuatorType
     assert ActuatorType.ZONE_VALVE_GRAPE in ActuatorType
     assert ActuatorType.CIRCULATION_FAN in ActuatorType
+    assert ActuatorType.HEATER in ActuatorType
+    assert ActuatorType.HUMIDIFIER in ActuatorType

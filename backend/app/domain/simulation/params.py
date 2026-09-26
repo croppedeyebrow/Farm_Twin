@@ -34,12 +34,14 @@ class EnvironmentModelParams:
     # --- 온도 [°C] ---------------------------------------------------------
     temp_outdoor_leak_per_s: float = 1.0 / 1800.0
     temp_hvac_cool_per_s: float = 0.004
+    temp_hvac_heat_per_s: float = 0.004  # 난방기 풀출력 승온율
     temp_led_heat_per_s: float = 0.0015
     temp_vent_mix_per_s: float = 1.0 / 600.0
 
     # --- 습度 [%RH] --------------------------------------------------------
     humidity_outdoor_leak_per_s: float = 1.0 / 1800.0
     humidity_dehumidifier_per_s: float = 0.01
+    humidity_humidifier_per_s: float = 0.01  # 가습기 풀출력 가습율
     humidity_vent_mix_per_s: float = 1.0 / 600.0
     humidity_irrigation_per_s: float = 0.002
 
