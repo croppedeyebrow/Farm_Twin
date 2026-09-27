@@ -4,4 +4,5 @@ routers 는 HTTP 경계만, 비즈니스 조회/쓰기·시뮬 스텝은 service
 - farm: 농장 snapshot/state/readings 조회
 - simulation: run 수명주기 + step 폐쇄 루프(외기→참값→측정)
   · Day 16: commit 성공 후 websocket.publisher 로 실시간 이벤트 발행
+- telemetry: reading 적재·스트림 품질 판정·센서 품질 조회 (Day 21)
 """

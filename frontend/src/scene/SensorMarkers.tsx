@@ -14,7 +14,12 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import type { Group, Mesh } from 'three'
 
-import type { FarmStateSnapshot, SensorSummary } from '../api/farms'
+import type {
+  FarmStateSnapshot,
+  ReadingQuality,
+  SensorSummary,
+} from '../api/farms'
+import { applyQualityToStatus } from '../realtime/sensorQuality'
 import { GUTTER_HEIGHT, STRAWBERRY_ROW_X } from './rackLayout'
 import {
   STATUS_COLOR,
@@ -28,6 +33,8 @@ type SensorMarkersProps = {
   sensors: SensorSummary[]
   state: FarmStateSnapshot | null
   stale: boolean
+  /** Day 21: sensor_id → reading 품질 (없으면 임계 색만) */
+  qualityBySensor?: Map<string, ReadingQuality>
   selectedSensorId: string | null
   onSelect: (sensorId: string, metricKey: string | null) => void
 }
@@ -52,7 +59,7 @@ function StatusHalo({
 
   useFrame(({ clock }) => {
     if (!meshRef.current) return
-    const mat = meshRef.current.material as {
+    const mat = meshRef.current.material as unknown as {
       emissiveIntensity: number
       opacity: number
     }
@@ -314,6 +321,7 @@ export function SensorMarkers({
   sensors,
   state,
   stale,
+  qualityBySensor,
   selectedSensorId,
   onSelect,
 }: SensorMarkersProps) {
@@ -322,14 +330,18 @@ export function SensorMarkers({
     for (const sensor of sensors) {
       const metric = sensorTypeToMetric(sensor.sensor_type)
       const value = metric && state ? state[metric] : Number.NaN
-      const level =
+      const thresholdLevel =
         metric && Number.isFinite(value)
           ? metricStatus(metric, value, { stale })
           : ('stale' as StatusLevel)
+      const level = applyQualityToStatus(
+        thresholdLevel,
+        qualityBySensor?.get(sensor.id),
+      )
       map.set(sensor.sensor_type, { sensor, level, metric })
     }
     return map
-  }, [sensors, state, stale])
+  }, [sensors, state, stale, qualityBySensor])
 
   const temp = byType.get('temperature') ?? null
   const humidity = byType.get('humidity') ?? null

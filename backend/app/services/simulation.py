@@ -9,8 +9,8 @@ routers/simulations.py  → HTTP 경계
 domain/simulation/*     → 순수 계산 (시계·외기·환경·센서)
 
 센서 noise 는 FarmState 에 절대 넣지 않는다.
-참값 갱신(_apply_environment_to_farm_state) 과 측정(persist_readings_batch) 을
-코드 경로상으로도 분리한다.
+참값 갱신(_apply_environment_to_farm_state) 과 측정(persist_samples) 을
+코드 경로상으로도 분리한다. 측정 적재·품질 판정은 services.telemetry 와 공유한다.
 
 =============================================================================
 상태 기계 (SimulationStatus)
@@ -49,10 +49,10 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Actuator, FarmState, Sensor, SensorReading, SimulationRun
+from app.db.models import Actuator, FarmState, Sensor, SimulationRun
 from app.domain.enums import (
     ActuatorMode,
     ReadingSource,
@@ -61,14 +61,16 @@ from app.domain.enums import (
 )
 from app.domain.simulation.config_loader import load_environment_params
 from app.domain.simulation.environment import step_environment
-from app.domain.simulation.sensors import VirtualSensorBank
+from app.domain.simulation.sensors import SensorSample, VirtualSensorBank
 from app.domain.simulation.state import (
     ActuatorInputs,
     EnvironmentState,
     OutdoorCondition,
 )
 from app.domain.simulation.weather import create_weather_adapter
+from app.domain.telemetry import StreamQualityAssessor
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
+from app.services.telemetry import ReadingWriter, open_stream
 from app.services.zone_runtime import advance_zones
 from app.websocket.publisher import (
     publish_farm_state_updated,
@@ -283,70 +285,52 @@ async def _load_actuator_inputs(
     return ActuatorInputs(**ratios)
 
 
-async def _next_reading_sequence(
-    session: AsyncSession,
-    run_id: uuid.UUID,
-) -> int:
-    """
-    run 내 sequence 다음 값.
-
-    UNIQUE(simulation_run_id, sequence) 를 지키려면
-    max(sequence)+1 부터 batch 를 채워야 한다. 행이 없으면 0.
-    """
-    current = await session.scalar(
-        select(func.coalesce(func.max(SensorReading.sequence), -1)).where(
-            SensorReading.simulation_run_id == run_id
-        )
-    )
-    return int(current) + 1
-
-
-async def persist_readings_batch(
-    session: AsyncSession,
+def persist_samples(
     *,
-    run: SimulationRun,
+    assessor: StreamQualityAssessor,
+    writer: ReadingWriter,
     sensors_by_type: dict[SensorType, Sensor],
-    samples: list,
-    sequence_start: int,
+    samples: list[SensorSample],
     sampled_at: datetime,
     ingested_at: datetime,
 ) -> int:
     """
-    SensorSample 목록을 sensor_readings 에 append-only batch insert.
+    가상 센서 샘플을 스트림 품질 판정 후 append-only 로 추가한다.
 
-    - 원본 수정 금지 (UPDATE 없음)
-    - 룸에 해당 sensor_type 메타가 없으면 그 샘플은 skip
-    - sampled_at / ingested_at: 시간_컬럼_의미.md (원본 샘플 vs 적재 시각)
+    시뮬은 송신측이라 센서별 source_sequence 를 판정기 상태에서 이어 발급한다.
+    룸에 해당 sensor_type 메타가 없으면 그 샘플은 skip.
     """
-    sequence = sequence_start
     inserted = 0
     for sample in samples:
         sensor = sensors_by_type.get(sample.sensor_type)
         if sensor is None:
             continue
-        session.add(
-            SensorReading(
-                sensor_id=sensor.id,
-                farm_id=run.farm_id,
-                room_id=run.room_id,
-                simulation_run_id=run.id,
-                sequence=sequence,
-                value=sample.value,
-                raw_value=sample.raw_value,
-                unit=sample.unit,
-                input_unit=sample.input_unit,
-                quality=sample.quality,
-                quality_reason=sample.quality_reason,
-                telemetry_schema_version=sample.telemetry_schema_version,
-                source=sample.source,
-                sensor_model_version=sensor.model_version,
-                simulation_time=sample.simulation_time,
-                sampled_at=sampled_at,
-                ingested_at=ingested_at,
-            )
+        source_sequence = assessor.next_sequence(sensor.id)
+        assessment = assessor.assess(
+            sensor.id,
+            sensor_type=sample.sensor_type,
+            source_sequence=source_sequence,
+            value=sample.value,
+            simulation_time=sample.simulation_time,
+            base_quality=sample.quality,
+            base_reason=sample.quality_reason,
+            sampled_at=sampled_at,
+            ingested_at=ingested_at,
         )
-        sequence += 1
-        inserted += 1
+        inserted += writer.add(
+            sensor=sensor,
+            assessment=assessment,
+            source_sequence=source_sequence,
+            value=sample.value,
+            raw_value=sample.raw_value,
+            unit=sample.unit,
+            input_unit=sample.input_unit,
+            source=sample.source,
+            simulation_time=sample.simulation_time,
+            sampled_at=sampled_at,
+            ingested_at=ingested_at,
+            telemetry_schema_version=sample.telemetry_schema_version,
+        )
     return inserted
 
 
@@ -416,7 +400,7 @@ async def step_run(
     )
 
     readings_inserted = 0
-    sequence = await _next_reading_sequence(session, run.id)
+    assessor, writer = await open_stream(session, run)
 
     for _ in range(steps):
         # 스텝 끝 시각의 외기를 읽어 경계조건으로 사용
@@ -453,17 +437,14 @@ async def step_run(
         if persist_readings:
             samples = sensor_bank.measure(env, source=ReadingSource.SIMULATED)
             now = datetime.now(UTC)
-            count = await persist_readings_batch(
-                session,
-                run=run,
+            readings_inserted += persist_samples(
+                assessor=assessor,
+                writer=writer,
                 sensors_by_type=sensors_by_type,
                 samples=samples,
-                sequence_start=sequence,
                 sampled_at=now,
                 ingested_at=now,
             )
-            sequence += count
-            readings_inserted += count
 
     await session.commit()
     await session.refresh(farm_state)

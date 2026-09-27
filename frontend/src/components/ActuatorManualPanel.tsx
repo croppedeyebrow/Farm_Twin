@@ -10,6 +10,12 @@ import {
   type ActuatorSummary,
   type FarmStateSnapshot,
 } from '../api/farms'
+import { useRealtimeStore } from '../store/realtimeStore'
+
+async function applyManual(actuatorId: string, ratio: number): Promise<void> {
+  const updated = await setActuatorManual(actuatorId, ratio)
+  useRealtimeStore.getState().applyActuatorSummary(updated)
+}
 
 export const MANUAL_ACTUATOR_ORDER = [
   'led',
@@ -112,7 +118,7 @@ function DeviceRow({
     setPending(true)
     setError(null)
     try {
-      await setActuatorManual(actuator.id, ratio)
+      await applyManual(actuator.id, ratio)
       setDraftPct(Math.round(ratio * 100))
       onSelect()
     } catch (err) {
@@ -196,6 +202,63 @@ function DeviceRow({
   )
 }
 
+/** 접힌 목록 한 줄 — 이름 클릭은 선택, 오른쪽 스위치는 ON(100%)/OFF 토글 */
+function RailRow({
+  actuator,
+  active,
+  disabled,
+  onSelect,
+}: {
+  actuator: ActuatorSummary
+  active: boolean
+  disabled?: boolean
+  onSelect: () => void
+}) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const on = actuator.output_ratio > 0 && actuator.mode !== 'off'
+  const label = LABELS[actuator.actuator_type]?.title ?? actuator.name
+
+  async function toggle() {
+    setPending(true)
+    setError(null)
+    try {
+      await applyManual(actuator.id, on ? 0 : 1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '적용 실패')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <li className="actuator-rail-row" title={error ?? undefined}>
+      <button
+        type="button"
+        className={active ? 'actuator-rail-btn is-active' : 'actuator-rail-btn'}
+        data-on={on ? 'true' : 'false'}
+        onClick={onSelect}
+      >
+        <span>{label}</span>
+        {on ? <em>{Math.round(actuator.output_ratio * 100)}%</em> : null}
+      </button>
+      <button
+        type="button"
+        className="actuator-rail-toggle"
+        role="switch"
+        aria-checked={on}
+        aria-label={`${label} ${on ? '끄기' : '켜기'}`}
+        data-on={on ? 'true' : 'false'}
+        data-error={error ? 'true' : 'false'}
+        disabled={pending || disabled}
+        onClick={() => void toggle()}
+      >
+        {pending ? '…' : on ? 'ON' : 'OFF'}
+      </button>
+    </li>
+  )
+}
+
 export function ActuatorManualPanel({
   actuators,
   state,
@@ -246,28 +309,15 @@ export function ActuatorManualPanel({
           onSelect={() => onSelectActuator(focus.id)}
         />
         <ul className="actuator-manual-rail" aria-label="장치 목록">
-          {ordered.map((item) => {
-            const on = item.output_ratio > 0 && item.mode !== 'off'
-            const label =
-              LABELS[item.actuator_type]?.title ?? item.name
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={
-                    item.id === focus.id
-                      ? 'actuator-rail-btn is-active'
-                      : 'actuator-rail-btn'
-                  }
-                  data-on={on ? 'true' : 'false'}
-                  onClick={() => onSelectActuator(item.id)}
-                >
-                  <span>{label}</span>
-                  <em>{on ? `${Math.round(item.output_ratio * 100)}%` : 'OFF'}</em>
-                </button>
-              </li>
-            )
-          })}
+          {ordered.map((item) => (
+            <RailRow
+              key={item.id}
+              actuator={item}
+              active={item.id === focus.id}
+              disabled={disabled}
+              onSelect={() => onSelectActuator(item.id)}
+            />
+          ))}
         </ul>
       </section>
     )

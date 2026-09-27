@@ -57,8 +57,8 @@ async def test_farm_snapshot(seeded_farm: None, api_client: AsyncClient) -> None
     body = response.json()
     assert body["farm"]["id"] == str(FARM_ID)
     assert body["state"]["version"] >= 1
-    assert len(body["sensors"]) == 5
-    assert len(body["actuators"]) == 5
+    assert len(body["sensors"]) == 10
+    assert len(body["actuators"]) == 13
     assert len(body["racks"]) == 3
 
 

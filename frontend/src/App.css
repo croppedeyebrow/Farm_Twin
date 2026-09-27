@@ -1767,6 +1767,44 @@
   color: #0f3d2e;
 }
 
+.actuator-rail-row {
+  display: flex;
+  gap: 0.28rem;
+}
+
+.actuator-rail-row .actuator-rail-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.actuator-rail-toggle {
+  flex: 0 0 3.2rem;
+  margin: 0;
+  padding: 0.35rem 0;
+  border: 1px solid #d5ddd6;
+  background: #f8faf8;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: #6b766f;
+  cursor: pointer;
+}
+
+.actuator-rail-toggle[data-on='true'] {
+  border-color: #2b8a3e;
+  background: #2b8a3e;
+  color: #fff;
+}
+
+.actuator-rail-toggle[data-error='true'] {
+  border-color: #e03131;
+}
+
+.actuator-rail-toggle:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .ops-actuator-manual .control-hint {
   color: #8b95a5;
 }

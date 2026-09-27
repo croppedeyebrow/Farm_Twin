@@ -18,8 +18,9 @@
 
 import { OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { Suspense } from 'react'
+import { Suspense, useMemo } from 'react'
 
+import { qualityBySensor } from '../realtime/sensorQuality'
 import { useRealtimeStore } from '../store/realtimeStore'
 import { ActuatorVisuals, actuatorRatios } from './ActuatorVisuals'
 import { EntranceDoors } from './EntranceDoors'
@@ -35,6 +36,8 @@ export function GrowingRoomScene() {
   const sensors = useRealtimeStore((s) => s.sensors)
   const actuators = useRealtimeStore((s) => s.actuators)
   const stale = useRealtimeStore((s) => s.stale)
+  const sensorHealth = useRealtimeStore((s) => s.sensorHealth)
+  const sensorQuality = useMemo(() => qualityBySensor(sensorHealth), [sensorHealth])
   const selectedSensorId = useRealtimeStore((s) => s.selectedSensorId)
   const selectedActuatorId = useRealtimeStore((s) => s.selectedActuatorId)
   const selectSensor = useRealtimeStore((s) => s.selectSensor)
@@ -113,6 +116,7 @@ export function GrowingRoomScene() {
           sensors={sensors}
           state={state}
           stale={stale}
+          qualityBySensor={sensorQuality}
           selectedSensorId={selectedSensorId}
           onSelect={(sensorId, metricKey) => {
             selectSensor(sensorId)

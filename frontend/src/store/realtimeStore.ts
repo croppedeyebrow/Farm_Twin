@@ -13,6 +13,10 @@
  * - sensors/actuators: 상세 패널 선택
  * - timeline: REST 제어 이벤트 + 로컬 스트림 이벤트
  * - selectedSensorId / selectedActuatorId / chartMetric: Day 19 3D↔차트 연동
+ *
+ * Day 21
+ * -----------------------------------------------------------------------------
+ * - sensorHealth: REST 센서 품질(good/suspect/bad/missing/stale) 주기 조회
  */
 
 import { create } from 'zustand'
@@ -23,6 +27,7 @@ import type {
   FarmSnapshot,
   FarmStateSnapshot,
   FarmZonesSnapshot,
+  SensorHealthReport,
   SensorSummary,
 } from '../api/farms'
 import type { SocketStatus } from '../realtime/farmSocket'
@@ -63,6 +68,7 @@ export type RealtimeStore = {
   simulationStatus: string | null
   lastError: string | null
   recovering: boolean
+  sensorHealth: SensorHealthReport | null
 
   setFarmId: (farmId: string) => void
   setSocketStatus: (status: SocketStatus) => void
@@ -85,6 +91,9 @@ export type RealtimeStore = {
   selectActuator: (id: string | null) => void
   setChartMetric: (metric: SensorMetricKey) => void
   pushTimeline: (entry: TimelineEntry) => void
+  setSensorHealth: (report: SensorHealthReport | null) => void
+  /** 수동 제어 REST 응답 즉시 반영 (WS actuator.updated 를 기다리지 않음) */
+  applyActuatorSummary: (actuator: ActuatorSummary) => void
 }
 
 function numberField(
@@ -141,8 +150,16 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
   simulationStatus: null,
   lastError: null,
   recovering: false,
+  sensorHealth: null,
 
   setFarmId: (farmId) => set({ farmId }),
+  setSensorHealth: (sensorHealth) => set({ sensorHealth }),
+  applyActuatorSummary: (actuator) =>
+    set((current) => ({
+      actuators: current.actuators.map((item) =>
+        item.id === actuator.id ? { ...item, ...actuator } : item,
+      ),
+    })),
   setSocketStatus: (socketStatus) => set({ socketStatus }),
   setError: (lastError) => set({ lastError }),
   setRecovering: (recovering) => set({ recovering }),

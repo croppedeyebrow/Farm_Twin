@@ -110,6 +110,65 @@ export type ControlEventOut = {
   command_status: string | null
 }
 
+/** Day 21: 센서 reading 품질 (backend ReadingQuality) */
+export type ReadingQuality = 'good' | 'suspect' | 'bad' | 'missing' | 'stale'
+
+export type QualityCounts = Partial<Record<ReadingQuality, number>>
+
+/**
+ * 센서 하나의 현재 품질.
+ * quality 는 조회 시점 판정(stale/missing 포함), stored_quality 는 최신 행 저장값.
+ */
+export type SensorHealth = {
+  sensor_id: string
+  code: string
+  name: string
+  sensor_type: string
+  unit: string
+  quality: ReadingQuality
+  quality_reason: string | null
+  stored_quality: ReadingQuality | null
+  value: number | null
+  raw_value: number | null
+  source_sequence: number | null
+  simulation_time: number | null
+  ingested_at: string | null
+  age_simulation_s: number | null
+  age_wall_s: number | null
+  recent_counts: QualityCounts
+}
+
+export type SensorHealthReport = {
+  farm_id: string
+  run_id: string | null
+  run_status: string | null
+  current_simulation_time: number | null
+  generated_at: string
+  recent_window: number
+  stale_after_simulation_s: number
+  stale_ingest_wall_s: number
+  summary: QualityCounts
+  sensors: SensorHealth[]
+}
+
+/**
+ * GET /api/farms/{farmId}/sensors/health?recent_window=
+ *
+ * 최신 run 기준 센서별 품질 (중복·누락·지연 판정 결과).
+ */
+export async function fetchSensorHealth(
+  farmId: string,
+  recentWindow = 60,
+): Promise<SensorHealthReport> {
+  const response = await fetch(
+    `/api/farms/${farmId}/sensors/health?recent_window=${recentWindow}`,
+  )
+  if (!response.ok) {
+    throw new Error(`sensor health ${response.status}`)
+  }
+  return (await response.json()) as SensorHealthReport
+}
+
 /**
  * GET /api/farms/{farmId}/snapshot
  *

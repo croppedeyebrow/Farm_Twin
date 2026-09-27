@@ -53,6 +53,7 @@ def process_telemetry_reading(
         sensor_type=reading.sensor_type,
         raw_value=reading.raw_value,
         input_unit=reading.input_unit,
+        sequence=reading.sequence,
         normalized_value=stored,
         unit=unit,
         quality=quality,

@@ -11,9 +11,16 @@
  * 5) 본 이벤트 → sequence 판정 + KPI ring / 로컬 타임라인
  *
  * 재연결·갭: snapshot(+events) 재조회로 latest 정렬.
+ *
+ * Day 21: 센서 품질(health)은 WS 이벤트가 없어 REST 주기 조회한다.
+ * stale 은 "새 값이 안 오는 것"이라 이벤트 기반으로는 감지할 수 없다.
  */
 
-import { fetchFarmEvents, fetchFarmSnapshot } from '../api/farms'
+import {
+  fetchFarmEvents,
+  fetchFarmSnapshot,
+  fetchSensorHealth,
+} from '../api/farms'
 import { FarmRealtimeSocket, type SocketStatus } from './farmSocket'
 import type { EventEnvelope } from './envelope'
 import {
@@ -26,6 +33,26 @@ let socket: FarmRealtimeSocket | null = null
 let activeFarmId: string | null = null
 /** 갭 복구 중 중복 snapshot 요청 방지 */
 let recovering = false
+let healthTimer: ReturnType<typeof setInterval> | null = null
+let healthInFlight = false
+
+const HEALTH_POLL_MS = 5000
+
+async function reloadSensorHealth(): Promise<void> {
+  const farmId = activeFarmId
+  if (!farmId || healthInFlight) return
+  healthInFlight = true
+  try {
+    const report = await fetchSensorHealth(farmId)
+    if (farmId === activeFarmId) {
+      useRealtimeStore.getState().setSensorHealth(report)
+    }
+  } catch {
+    // 품질 패널은 보조 — 실패해도 세션을 깨지 않는다
+  } finally {
+    healthInFlight = false
+  }
+}
 
 async function reloadControlEvents(): Promise<void> {
   if (!activeFarmId) return
@@ -47,6 +74,7 @@ async function reloadSnapshot(reason: string): Promise<void> {
     const snapshot = await fetchFarmSnapshot(activeFarmId)
     useRealtimeStore.getState().applySnapshot(snapshot)
     await reloadControlEvents()
+    void reloadSensorHealth()
   } catch (error) {
     const message =
       error instanceof Error ? error.message : `snapshot failed (${reason})`
@@ -118,8 +146,10 @@ export async function startFarmRealtimeSession(farmId: string): Promise<void> {
   stopFarmRealtimeSession()
   activeFarmId = farmId
   useRealtimeStore.getState().setFarmId(farmId)
+  useRealtimeStore.getState().setSensorHealth(null)
 
   await reloadSnapshot('boot')
+  healthTimer = setInterval(() => void reloadSensorHealth(), HEALTH_POLL_MS)
 
   socket = new FarmRealtimeSocket({
     onStatus: handleStatus,
@@ -132,6 +162,8 @@ export async function startFarmRealtimeSession(farmId: string): Promise<void> {
 export function stopFarmRealtimeSession(): void {
   activeFarmId = null
   recovering = false
+  if (healthTimer) clearInterval(healthTimer)
+  healthTimer = null
   socket?.stop()
   socket = null
 }

@@ -32,7 +32,9 @@ from app.schemas.farm import (
     SensorReadingOut,
     SensorSummary,
 )
+from app.schemas.telemetry import SensorHealthReport
 from app.services import farm as farm_service
+from app.services import telemetry as telemetry_service
 
 router = APIRouter(tags=["farms"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -70,6 +72,20 @@ async def list_farm_sensors(
 ) -> list[SensorSummary]:
     """농장 센서 메타데이터 목록."""
     return await farm_service.list_farm_sensors(session, farm_id)
+
+
+@router.get("/farms/{farm_id}/sensors/health", response_model=SensorHealthReport)
+async def get_sensor_health(
+    farm_id: uuid.UUID,
+    session: DbSession,
+    recent_window: int = Query(default=60, ge=1, le=1000),
+) -> SensorHealthReport:
+    """센서별 현재 품질 (최신 run 기준, 조회 시점 stale/missing 포함)."""
+    return await telemetry_service.get_sensor_health(
+        session,
+        farm_id,
+        recent_window=recent_window,
+    )
 
 
 @router.get("/farms/{farm_id}/actuators", response_model=list[ActuatorSummary])

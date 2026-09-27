@@ -17,13 +17,14 @@ export const realtimeEventTypeSchema = z.enum([
   'actuator.updated',
 ])
 
+// z.uuid() 는 RFC variant 비트까지 검사해 시드 고정 ID(2222…)를 거부하므로 형식만 보는 guid 사용
 export const eventEnvelopeSchema = z.object({
-  event_id: z.string().uuid(),
+  event_id: z.guid(),
   event_type: realtimeEventTypeSchema,
   schema_version: z.literal(EVENT_SCHEMA_VERSION),
-  farm_id: z.string().uuid(),
-  room_id: z.string().uuid().nullable().optional(),
-  simulation_run_id: z.string().uuid().nullable().optional(),
+  farm_id: z.guid(),
+  room_id: z.guid().nullable().optional(),
+  simulation_run_id: z.guid().nullable().optional(),
   sequence: z.number().int().nonnegative(),
   simulation_time: z.number().nullable().optional(),
   occurred_at: z.string(),

@@ -119,15 +119,20 @@ class FarmStateOut(BaseModel):
 
 
 class SensorReadingOut(BaseModel):
-    """가상 센서 측정값 한 점 (sensor_readings)."""
+    """
+    가상 센서 측정값 한 점 (sensor_readings).
+
+    quality=missing 마커 행은 value/raw_value 가 null 이다 (Day 21).
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     sensor_id: uuid.UUID
     sequence: int
-    value: float  # normalized
-    raw_value: float
+    source_sequence: int | None = None
+    value: float | None  # normalized
+    raw_value: float | None
     unit: Unit
     input_unit: Unit
     quality: ReadingQuality

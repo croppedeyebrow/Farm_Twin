@@ -63,9 +63,16 @@ ROOM_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 RUN_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 
 
-def _stable_uuid(prefix: str, index: int) -> uuid.UUID:
-    """prefix(8 hex) + index 기반 고정 UUID. 종류가 9개를 넘어도 안전."""
-    return uuid.UUID(f"{prefix}-5555-5555-5555-{index:012d}")
+def _stable_uuid(digit: str, index: int) -> uuid.UUID:
+    """
+    반복 숫자 + index 고정 UUID.
+
+    1~9 는 문서·테스트의 기존 ID(예: 66666666-6666-6666-6666-666666666661)와 같고,
+    10 이상도 유효한 UUID 가 된다. index 가 digit*2 (66, 77) 에 닿으면 충돌한다.
+    """
+    return uuid.UUID(
+        f"{digit * 8}-{digit * 4}-{digit * 4}-{digit * 4}-{str(index).rjust(12, digit)}"
+    )
 
 
 async def _ensure_room_devices(session, room_id: uuid.UUID) -> int:
@@ -86,7 +93,7 @@ async def _ensure_room_devices(session, room_id: uuid.UUID) -> int:
             continue
         session.add(
             Sensor(
-                id=_stable_uuid("66666666", index),
+                id=_stable_uuid("6", index),
                 room_id=room_id,
                 rack_id=None,
                 code=sensor_type.value,
@@ -109,7 +116,7 @@ async def _ensure_room_devices(session, room_id: uuid.UUID) -> int:
             continue
         session.add(
             Actuator(
-                id=_stable_uuid("77777777", index),
+                id=_stable_uuid("7", index),
                 room_id=room_id,
                 code=actuator_type.value,
                 name=actuator_type.value.replace("_", " ").title(),
@@ -195,7 +202,7 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
         for index, sensor_type in enumerate(SensorType, start=1):
             sensors.append(
                 Sensor(
-                    id=_stable_uuid("66666666", index),
+                    id=_stable_uuid("6", index),
                     room_id=ROOM_ID,
                     rack_id=(
                         racks[0].id
@@ -213,7 +220,7 @@ async def seed_mvp(*, force: bool = False) -> dict[str, str]:
 
         actuators = [
             Actuator(
-                id=_stable_uuid("77777777", i),
+                id=_stable_uuid("7", i),
                 room_id=ROOM_ID,
                 code=actuator_type.value,
                 name=actuator_type.value.replace("_", " ").title(),

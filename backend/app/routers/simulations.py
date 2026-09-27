@@ -32,7 +32,9 @@ from app.schemas.simulation import (
     SimulationStepRequest,
     SimulationStepResult,
 )
+from app.schemas.telemetry import TelemetryIngestRequest, TelemetryIngestResult
 from app.services import simulation as simulation_service
+from app.services import telemetry as telemetry_service
 
 router = APIRouter(tags=["simulations"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -99,3 +101,18 @@ async def step_simulation(
         dt_seconds=request.dt_seconds,
         persist_readings=request.persist_readings,
     )
+
+
+@router.post("/simulations/{run_id}/readings", response_model=TelemetryIngestResult)
+async def ingest_readings(
+    run_id: uuid.UUID,
+    body: TelemetryIngestRequest,
+    session: DbSession,
+) -> TelemetryIngestResult:
+    """
+    외부 reading 배치 적재 (RUNNING / PAUSED).
+
+    각 reading 은 센서별 sequence 필수. 중복·역순은 거부하고,
+    건너뛴 sequence 는 quality=missing 마커로 남긴다.
+    """
+    return await telemetry_service.ingest_readings(session, run_id, body)

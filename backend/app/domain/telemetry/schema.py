@@ -30,6 +30,7 @@ class TelemetryReadingIn(BaseModel):
 
     - raw_value / input_unit: 센서가 보낸 원본 (덮어쓰지 않음)
     - schema_version 불일치·금지 필드는 거부 (extra=forbid)
+    - sequence: 센서 스트림별 증가 번호 (DB source_sequence). 외부 ingest 는 필수.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -38,6 +39,7 @@ class TelemetryReadingIn(BaseModel):
     sensor_type: SensorType
     raw_value: float
     input_unit: Unit
+    sequence: int | None = Field(default=None, ge=0)
     source: ReadingSource = ReadingSource.SIMULATED
     simulation_time: float = Field(ge=0.0)
     sampled_at: datetime | None = None
@@ -54,7 +56,7 @@ class TelemetryReadingNormalized(BaseModel):
 
     - normalized_value / unit: 저장·규칙·관제에 쓰는 값
     - raw_value / input_unit: 원본 보존
-    - quality_reason: Day 20은 clamp·unit 사유, Day 21+ 확장
+    - quality_reason: 범위 사유만. 스트림 사유는 quality.StreamQualityAssessor 가 더한다.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -63,6 +65,7 @@ class TelemetryReadingNormalized(BaseModel):
     sensor_type: SensorType
     raw_value: float
     input_unit: Unit
+    sequence: int | None = None
     normalized_value: float
     unit: Unit
     quality: ReadingQuality

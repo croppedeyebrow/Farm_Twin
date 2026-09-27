@@ -6,7 +6,8 @@
  * 정상=녹색, 주의=주황, 위험=적색(점멸), 불량/stale=회색
  *
  * KPI 참값으로 센서 마커 색을 정한다.
- * (가상 센서 quality 는 readings API — Day 19 MVP 는 참값 임계로 충분)
+ * Day 21: reading 품질이 의심이면 주황 이상, 불량·누락·stale 이면 회색으로 덮는다
+ * (realtime/sensorQuality.applyQualityToStatus).
  */
 
 export type StatusLevel = 'ok' | 'warn' | 'danger' | 'stale'

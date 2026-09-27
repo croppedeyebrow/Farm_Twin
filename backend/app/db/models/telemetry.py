@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -106,9 +107,16 @@ class SensorReading(Base):
     - quality / quality_reason
     - telemetry_schema_version : reading 계약 (envelope 의 events.v1 과 별개)
 
+    Day 21 sequence 두 종류
+    -----------------------
+    - sequence        : run 안 적재 순서 (모든 센서 공용, 서버가 발급)
+    - source_sequence : 센서 스트림별 송신 번호. 중복·누락 판정 기준.
+    누락된 source_sequence 는 value/raw_value 없이 quality=missing 마커 행으로 남긴다.
+
     인덱스(설계):
     - (sensor_id, simulation_time DESC)
     - (simulation_run_id, sequence) UNIQUE
+    - (simulation_run_id, sensor_id, source_sequence) UNIQUE (NULL 제외)
     """
 
     __tablename__ = "sensor_readings"
@@ -119,6 +127,22 @@ class SensorReading(Base):
             name="uq_sensor_readings_run_sequence",
         ),
         CheckConstraint("sequence >= 0", name="ck_sensor_readings_sequence_nonneg"),
+        CheckConstraint(
+            "source_sequence IS NULL OR source_sequence >= 0",
+            name="ck_sensor_readings_source_sequence_nonneg",
+        ),
+        CheckConstraint(
+            "quality = 'missing' OR (value IS NOT NULL AND raw_value IS NOT NULL)",
+            name="ck_sensor_readings_value_present",
+        ),
+        Index(
+            "uq_sensor_readings_run_sensor_source_seq",
+            "simulation_run_id",
+            "sensor_id",
+            "source_sequence",
+            unique=True,
+            postgresql_where=text("source_sequence IS NOT NULL"),
+        ),
         # 센서별 최신 이력 조회용 (정렬은 쿼리에서 DESC)
         Index(
             "ix_sensor_readings_sensor_id_simulation_time",
@@ -163,9 +187,10 @@ class SensorReading(Base):
         index=True,
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # value = normalized (규칙·관제용). raw_value 는 원본 보존 (Day 20).
-    value: Mapped[float] = mapped_column(Float, nullable=False)
-    raw_value: Mapped[float] = mapped_column(Float, nullable=False)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[Unit] = mapped_column(str_enum(Unit), nullable=False)
     input_unit: Mapped[Unit] = mapped_column(str_enum(Unit), nullable=False)
     quality: Mapped[ReadingQuality] = mapped_column(
