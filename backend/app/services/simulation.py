@@ -46,21 +46,22 @@ push 실패는 publisher 가 삼키므로 API 응답·DB 상태는 유지된다.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Actuator, FarmState, Sensor, SimulationRun
+from app.db.models import Actuator, FarmState, Sensor, SimulationRun, WeatherSnapshot
 from app.domain.control.evaluate import MetricReading
 from app.domain.enums import (
     ActuatorMode,
     ReadingSource,
     SensorType,
     SimulationStatus,
+    WeatherMode,
 )
 from app.domain.simulation.config_loader import load_environment_params
 from app.domain.simulation.environment import step_environment
@@ -74,8 +75,17 @@ from app.domain.simulation.weather import create_weather_adapter
 from app.domain.telemetry import StreamQualityAssessor
 from app.schemas.farm import ActuatorSummary
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
-from app.services.faults import load_active_faults
+from app.services.checkpoint import (
+    capture_initial_state,
+    restore_replay_start,
+    scheduled_manual_actions,
+    seed_gates,
+    seed_stream_states,
+)
+from app.services.faults import load_fault_schedule
+from app.services.manual_control import record_manual_command
 from app.services.room_control import missing_reading, open_room_controller
+from app.services.sender import SENDER_SEQUENCES
 from app.services.telemetry import ReadingWriter, open_stream
 from app.services.zone_runtime import advance_zones
 from app.websocket.publisher import (
@@ -239,6 +249,56 @@ def _apply_environment_to_farm_state(
     farm_state.version = farm_state.version + 1
 
 
+def _replay_weather_samples(run: SimulationRun) -> list[tuple[float, float, float]] | None:
+    """REPLAY 외기 run 의 (t, T, H) 시계열. 재생 run 이 아니면 None."""
+    if run.weather_mode is not WeatherMode.REPLAY:
+        return None
+    rows = (run.replay_input or {}).get("weather") or []
+    if not rows:
+        raise HTTPException(status_code=409, detail="REPLAY run has no weather series")
+    return [(float(t), float(temp), float(hum)) for t, temp, hum in rows]
+
+
+async def _next_weather_sequence(session: AsyncSession, run_id: uuid.UUID) -> int:
+    last = await session.scalar(
+        select(func.max(WeatherSnapshot.sequence)).where(
+            WeatherSnapshot.simulation_run_id == run_id
+        )
+    )
+    return 1 if last is None else last + 1
+
+
+def _apply_scheduled_manual(
+    session: AsyncSession,
+    run: SimulationRun,
+    actuators_by_code: Mapping[str, Actuator],
+    changed_ids: set[uuid.UUID],
+    *,
+    step_start: float,
+    dt_seconds: float,
+) -> bool:
+    """재생 run 의 원본 수동 제어를 이 스텝 전에 적용하고 명령으로 남긴다."""
+    applied = False
+    for action in scheduled_manual_actions(
+        run, step_start=step_start, dt_seconds=dt_seconds
+    ):
+        actuator = actuators_by_code.get(action["actuator_code"])
+        if actuator is None:
+            continue
+        actuator.mode = ActuatorMode(action["mode"])
+        actuator.output_ratio = float(action["output_ratio"])
+        record_manual_command(
+            session,
+            run,
+            actuator,
+            simulation_time=float(action["simulation_time"]),
+            now=datetime.now(UTC),
+        )
+        changed_ids.add(actuator.id)
+        applied = True
+    return applied
+
+
 def actuator_inputs_from(actuators: Iterable[Actuator]) -> ActuatorInputs:
     """
     ORM Actuator 현재 운전 캐시 → 상태전이 입력 벡터.
@@ -277,63 +337,21 @@ def actuator_inputs_from(actuators: Iterable[Actuator]) -> ActuatorInputs:
         "vent_motor": "vent_motor",
     }
     for actuator in actuators:
-        field = type_to_field.get(actuator.actuator_type.value)
-        if field is None:
+        target = type_to_field.get(actuator.actuator_type.value)
+        if target is None:
             continue
         if actuator.mode is ActuatorMode.OFF:
             continue
-        ratios[field] = max(ratios[field], actuator.output_ratio)
+        ratios[target] = max(ratios[target], actuator.output_ratio)
     return ActuatorInputs(**ratios)
-
-
-@dataclass
-class _SenderCursor:
-    issued: int
-    # 발급 시점에 수신측이 마지막으로 받은 번호 — DB 와 어긋나면 커서를 버린다
-    received: int | None
-
-
-class SenderSequences:
-    """
-    시뮬 송신측 센서별 source_sequence.
-
-    dropout 중에도 번호는 진행하지만 저장되는 행이 없어 DB 만으로는 복원할 수 없다.
-    그래서 프로세스 메모리에 커서를 두고, 수신측 상태(DB 복원)가 커서를 만든
-    시점과 같을 때만 이어 쓴다. 재시작·재시드로 어긋나면 수신측 기준으로 돌아간다
-    (그 경우 복구 시 누락 마커가 생기지 않을 뿐 stale 판정은 유지된다).
-    """
-
-    def __init__(self) -> None:
-        self._cursors: dict[tuple[uuid.UUID, uuid.UUID], _SenderCursor] = {}
-
-    def clear(self) -> None:
-        self._cursors.clear()
-
-    def issue(
-        self,
-        run_id: uuid.UUID,
-        sensor_id: uuid.UUID,
-        assessor: StreamQualityAssessor,
-    ) -> int:
-        received = assessor.state_for(sensor_id).last_sequence
-        cursor = self._cursors.get((run_id, sensor_id))
-        sequence = assessor.next_sequence(sensor_id)
-        if cursor is not None and cursor.received == received:
-            sequence = max(sequence, cursor.issued + 1)
-        self._cursors[(run_id, sensor_id)] = _SenderCursor(issued=sequence, received=received)
-        return sequence
-
-    def delivered(self, run_id: uuid.UUID, sensor_id: uuid.UUID, sequence: int) -> None:
-        self._cursors[(run_id, sensor_id)] = _SenderCursor(issued=sequence, received=sequence)
-
-
-SENDER_SEQUENCES = SenderSequences()
 
 
 @dataclass(frozen=True)
 class PersistResult:
     inserted: int
     readings: dict[SensorType, MetricReading]
+    # 규칙 명령의 판정 근거 — dropout 센서는 행이 없어 빠진다
+    reading_ids: dict[SensorType, uuid.UUID] = field(default_factory=dict)
 
 
 def persist_samples(
@@ -358,6 +376,7 @@ def persist_samples(
     """
     inserted = 0
     readings: dict[SensorType, MetricReading] = {}
+    reading_ids: dict[SensorType, uuid.UUID] = {}
     for sensor_type in dropped_types:
         sensor = sensors_by_type.get(sensor_type)
         if sensor is None:
@@ -405,7 +424,9 @@ def persist_samples(
             ingested_at=ingested_at,
             telemetry_schema_version=sample.telemetry_schema_version,
         )
-    return PersistResult(inserted=inserted, readings=readings)
+        if assessment.verdict is not None and writer.last_reading_id is not None:
+            reading_ids[sample.sensor_type] = writer.last_reading_id
+    return PersistResult(inserted=inserted, readings=readings, reading_ids=reading_ids)
 
 
 async def step_run(
@@ -458,17 +479,43 @@ async def step_run(
         await session.scalars(select(Sensor).where(Sensor.room_id == run.room_id))
     ).all()
     sensors_by_type = {sensor.sensor_type: sensor for sensor in sensors}
-
-    # 계수·외기·센서·설비는 스텝 루프 밖에서 한 번만 준비 (동일 입력 재현)
-    params = load_environment_params()
-    weather = create_weather_adapter(run.weather_mode.value, seed=run.random_seed)
-    sensor_bank = VirtualSensorBank(seed=run.random_seed)
     room_actuators = (
         await session.scalars(select(Actuator).where(Actuator.room_id == run.room_id))
     ).all()
+
+    # Day 23: 재생 run 은 첫 스텝에 원본 체크포인트로 룸을 되돌리고,
+    # 일반 run 은 첫 스텝 직전 상태를 체크포인트로 남긴다.
+    replay_input = run.replay_input
+    if replay_input is not None and not replay_input.get("restored"):
+        if run.initial_state is None:
+            raise HTTPException(status_code=409, detail="replay run has no checkpoint")
+        restore_replay_start(run, farm_state, sensors, room_actuators)
+    elif run.initial_state is None:
+        run.initial_state = await capture_initial_state(
+            session, run, farm_state, sensors, room_actuators
+        )
+
+    # 계수·외기·센서·설비는 스텝 루프 밖에서 한 번만 준비 (동일 입력 재현)
+    params = load_environment_params()
+    weather = create_weather_adapter(
+        run.weather_mode.value,
+        seed=run.random_seed,
+        replay_samples=_replay_weather_samples(run),
+    )
+    sensor_bank = VirtualSensorBank(seed=run.random_seed)
     actuators = actuator_inputs_from(room_actuators)
-    faults = await load_active_faults(session, run.id)
-    controller = await open_room_controller(session, run, room_actuators)
+    fault_schedule = await load_fault_schedule(
+        session, run.id, since_simulation_time=run.simulation_time_seconds
+    )
+    controller = await open_room_controller(
+        session,
+        run,
+        room_actuators,
+        seed_gates=seed_gates(run.initial_state) if replay_input is not None else None,
+    )
+    run.rule_set_version = controller.rule_set_version
+    weather_sequence = await _next_weather_sequence(session, run.id)
+    actuators_by_code = {actuator.code: actuator for actuator in room_actuators}
 
     env = environment_from_farm_state(farm_state)
     # 커밋된 run 시계를 도메인 상태의 권위 있는 시각으로 사용
@@ -482,11 +529,44 @@ async def step_run(
     )
 
     readings_inserted = 0
-    assessor, writer = await open_stream(session, run)
+    assessor, writer = await open_stream(
+        session,
+        run,
+        seed_states=(
+            seed_stream_states(run.initial_state, sensors)
+            if replay_input is not None
+            else None
+        ),
+    )
 
     for _ in range(steps):
+        # 재생 run: 원본이 이 스텝 전에 바꾼 수동 제어를 같은 시각으로 다시 적용
+        if replay_input is not None and _apply_scheduled_manual(
+            session,
+            run,
+            actuators_by_code,
+            controller.changed_actuator_ids,
+            step_start=env.simulation_time,
+            dt_seconds=dt_seconds,
+        ):
+            actuators = actuator_inputs_from(room_actuators)
+
         # 스텝 끝 시각의 외기를 읽어 경계조건으로 사용
         outdoor = await weather.read(env.simulation_time + dt_seconds)
+        wall_now = datetime.now(UTC)
+        session.add(
+            WeatherSnapshot(
+                simulation_run_id=run.id,
+                sequence=weather_sequence,
+                source=run.weather_mode,
+                outdoor_temperature_c=outdoor.temperature_c,
+                outdoor_humidity_pct=outdoor.humidity_pct,
+                simulation_time=env.simulation_time + dt_seconds,
+                sampled_at=wall_now,
+                ingested_at=wall_now,
+            )
+        )
+        weather_sequence += 1
         outdoor = OutdoorCondition(
             temperature_c=outdoor.temperature_c,
             humidity_pct=outdoor.humidity_pct,
@@ -517,6 +597,7 @@ async def step_run(
 
         # ② 측정은 참값 env 를 읽기만 한다 (Day 22: 활성 고장은 측정에만 적용)
         if persist_readings:
+            faults = fault_schedule.active_at(env.simulation_time)
             samples = sensor_bank.measure(
                 env, source=ReadingSource.SIMULATED, faults=faults
             )
@@ -543,6 +624,7 @@ async def step_run(
                 persisted.readings,
                 simulation_time=env.simulation_time,
                 now=now,
+                reading_ids=persisted.reading_ids,
             ):
                 actuators = actuator_inputs_from(room_actuators)
 

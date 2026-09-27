@@ -36,6 +36,9 @@ min_on / cooldown (Day 14 gates)
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from app.domain.enums import ActuatorMode, ActuatorType, RuleComparator, SensorType
@@ -91,3 +94,44 @@ class RuleSet:
         """enabled 만, priority 오름차순 · name 안정 정렬."""
         enabled = [rule for rule in self.rules if rule.enabled]
         return sorted(enabled, key=lambda rule: (rule.priority, rule.name))
+
+    def fingerprint(self) -> str:
+        """활성 규칙 묶음의 rule_set_version (Day 23 lineage)."""
+        return rule_set_fingerprint(self.rules, schema_version=self.schema_version)
+
+
+def rule_set_fingerprint(
+    rules: Iterable[RuleDefinition],
+    *,
+    schema_version: str = RULE_SCHEMA_VERSION,
+) -> str:
+    """
+    `{schema_version}:{hash12}`.
+
+    판정에 영향을 주는 필드만 넣는다 — description 이 바뀌어도 버전은 그대로다.
+    같은 지문이면 같은 입력에서 같은 명령이 나온다 (replay 비교 전제).
+    """
+    payload = [
+        [
+            rule.name,
+            rule.version,
+            rule.priority,
+            rule.metric.value,
+            rule.comparator.value,
+            rule.start_threshold,
+            rule.stop_threshold,
+            rule.target_actuator_type.value,
+            rule.target_mode.value,
+            rule.target_output_ratio,
+            rule.cooldown_seconds,
+            rule.min_on_seconds,
+        ]
+        for rule in sorted(
+            (rule for rule in rules if rule.enabled),
+            key=lambda rule: rule.name,
+        )
+    ]
+    digest = hashlib.sha256(
+        json.dumps(payload, separators=(",", ":")).encode()
+    ).hexdigest()
+    return f"{schema_version}:{digest[:12]}"

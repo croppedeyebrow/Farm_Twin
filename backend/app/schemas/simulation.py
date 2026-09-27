@@ -39,6 +39,9 @@ class SimulationRunOut(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     notes: str | None = None
+    # Day 23 lineage: 활성 규칙 묶음 지문, 재생 run 이면 원본 run
+    rule_set_version: str | None = None
+    replay_of_run_id: uuid.UUID | None = None
 
 
 class SimulationStepRequest(BaseModel):

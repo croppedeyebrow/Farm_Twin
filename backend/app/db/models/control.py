@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from app.db.models.equipment import Actuator
     from app.db.models.hierarchy import Farm, Room
     from app.db.models.simulation import SimulationRun
+    from app.db.models.telemetry import SensorReading
 
 
 class ControlRule(TimestampMixin, Base):
@@ -201,10 +202,21 @@ class ControlCommand(Base):
     simulation_time: Mapped[float] = mapped_column(Float, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
+    # Day 23 lineage: 규칙 행이 갱신돼도 명령 시점 개정 번호와 판정 근거 측정은 남는다.
+    # 수동 명령은 둘 다 null.
+    rule_version: Mapped[int | None] = mapped_column(Integer)
+    trigger_reading_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sensor_readings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     simulation_run: Mapped[SimulationRun] = relationship()
     actuator: Mapped[Actuator] = relationship()
     rule: Mapped[ControlRule | None] = relationship(back_populates="commands")
+    # 같은 flush 에서 reading INSERT 가 먼저 나가도록 관계로 의존성을 건다
+    trigger_reading: Mapped[SensorReading | None] = relationship()
     events: Mapped[list[ControlEvent]] = relationship(back_populates="command")
 
 

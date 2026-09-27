@@ -63,6 +63,16 @@ export function formatAge(seconds: number | null): string {
   return `${(seconds / 3600).toFixed(1)}시간`
 }
 
+/** 가상 시계 초 → "D+1 06:30" (run 시작 기준 경과) */
+export function formatSimTime(seconds: number | null): string {
+  if (seconds == null) return '—'
+  const total = Math.max(0, Math.round(seconds))
+  const day = Math.floor(total / 86400)
+  const hh = String(Math.floor((total % 86400) / 3600)).padStart(2, '0')
+  const mm = String(Math.floor((total % 3600) / 60)).padStart(2, '0')
+  return day > 0 ? `D+${day} ${hh}:${mm}` : `${hh}:${mm}`
+}
+
 /** 임계 기반 상태에 품질을 덮어쓴다 — 믿을 수 없는 값은 색으로 판단하지 않는다. */
 export function applyQualityToStatus(
   level: StatusLevel,

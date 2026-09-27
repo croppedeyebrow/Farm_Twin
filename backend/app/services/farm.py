@@ -24,6 +24,7 @@ list_farm_control_events: 관제 타임라인용 ControlEvent 이력.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -32,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Actuator, Farm, FarmState, Rack, Room, Sensor, SensorReading
 from app.db.models.control import ControlCommand, ControlEvent
 from app.db.models.simulation import SimulationRun
+from app.domain.simulation.state import EnvironmentState
 from app.schemas.farm import (
     ActuatorSummary,
     ControlEventOut,
@@ -47,7 +49,6 @@ from app.schemas.farm import (
 )
 from app.services.zone_runtime import zones_payload
 from app.websocket.manager import get_connection_manager
-from app.domain.simulation.state import EnvironmentState
 
 
 async def list_farms(session: AsyncSession) -> list[FarmSummary]:
@@ -217,9 +218,10 @@ async def set_actuator_manual(
 
     - DB actuators 캐시 갱신 후 commit
     - WS actuator.updated 푸시 (commit-then-push)
-    - ControlCommand 이력은 run 필수라 MVP 에서는 WS/타임라인 로컬로 대체
+    - 룸에 진행 중 run 이 있으면 수동 명령·이벤트로 남긴다 (Day 23 lineage·재생 입력)
     """
     from app.domain.enums import ActuatorMode
+    from app.services.manual_control import active_run_for_room, record_manual_command
     from app.websocket.publisher import publish_actuator_updated
 
     actuator = await session.get(Actuator, actuator_id)
@@ -236,6 +238,16 @@ async def set_actuator_manual(
     else:
         actuator.mode = ActuatorMode.MANUAL
         actuator.output_ratio = output_ratio
+
+    run = await active_run_for_room(session, room.id)
+    if run is not None:
+        record_manual_command(
+            session,
+            run,
+            actuator,
+            simulation_time=run.simulation_time_seconds,
+            now=datetime.now(UTC),
+        )
 
     await session.commit()
     await session.refresh(actuator)

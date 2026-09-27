@@ -5,7 +5,7 @@
 흐름
 -----------------------------------------------------------------------------
   주입 : fault_injections 행 추가 (active, start_simulation_time = run 시계)
-  적용 : step_run 이 활성 고장을 읽어 VirtualSensorBank.measure 에 넘긴다
+  적용 : step_run 이 스텝 시각에 걸린 고장을 골라 VirtualSensorBank.measure 에 넘긴다
   해제 : active=False + end_simulation_time / cleared_at 기록
 
 원시 sensor_readings 는 건드리지 않는다. 고장 구간의 측정은 이미
@@ -20,7 +20,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -31,7 +31,11 @@ from app.db.models import (
     SimulationRun,
 )
 from app.domain.enums import FaultType, SensorType, SimulationStatus
-from app.domain.simulation.faults import DEFAULT_SPIKE_MAGNITUDE, ActiveFault
+from app.domain.simulation.faults import (
+    DEFAULT_SPIKE_MAGNITUDE,
+    ActiveFault,
+    FaultSchedule,
+)
 from app.domain.simulation.sensors import DEFAULT_SENSOR_CHANNELS, true_value_for
 from app.schemas.fault import (
     FaultClearRequest,
@@ -229,28 +233,41 @@ async def list_farm_faults(session: AsyncSession, farm_id: uuid.UUID) -> FaultLi
     return await list_run_faults(session, run.id)
 
 
-async def load_active_faults(
+async def load_fault_schedule(
     session: AsyncSession,
     run_id: uuid.UUID,
-) -> dict[SensorType, ActiveFault]:
-    """step 이 측정에 적용할 진행 중 고장 (센서 타입별)."""
+    *,
+    since_simulation_time: float,
+) -> FaultSchedule:
+    """
+    step 이 측정에 적용할 고장 — 진행 중이거나 since 이후에 끝난 것.
+
+    스텝마다 FaultSchedule.active_at 으로 그 시각에 걸린 고장을 고른다.
+    재생 run 은 원본 고장 이력(해제 시각 포함)을 그대로 받아 같은 시각에 적용된다.
+    """
     rows = (
         await session.execute(
             select(FaultInjection, Sensor.sensor_type)
             .join(Sensor, FaultInjection.sensor_id == Sensor.id)
             .where(
                 FaultInjection.simulation_run_id == run_id,
-                FaultInjection.active.is_(True),
+                or_(
+                    FaultInjection.end_simulation_time.is_(None),
+                    FaultInjection.end_simulation_time >= since_simulation_time,
+                ),
             )
         )
     ).all()
-    return {
-        sensor_type: ActiveFault(
-            sensor_type=sensor_type,
-            fault_type=fault.fault_type,
-            start_simulation_time=fault.start_simulation_time,
-            magnitude=fault.magnitude,
-            stuck_value=fault.stuck_value,
+    return FaultSchedule(
+        faults=tuple(
+            ActiveFault(
+                sensor_type=sensor_type,
+                fault_type=fault.fault_type,
+                start_simulation_time=fault.start_simulation_time,
+                magnitude=fault.magnitude,
+                stuck_value=fault.stuck_value,
+                end_simulation_time=fault.end_simulation_time,
+            )
+            for fault, sensor_type in rows
         )
-        for fault, sensor_type in rows
-    }
+    )

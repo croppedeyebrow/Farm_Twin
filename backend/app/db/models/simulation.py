@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     DateTime,
@@ -27,7 +27,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -111,6 +111,19 @@ class SimulationRun(TimestampMixin, Base):
         DateTime(timezone=True),
     )
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Day 23 lineage·replay
+    # 스텝 시점 활성 규칙 묶음 지문. 개별 명령의 규칙 개정은 control_commands.rule_version.
+    rule_set_version: Mapped[str | None] = mapped_column(String(64))
+    # 첫 스텝 직전 체크포인트 — 재생이 같은 출발점에서 시작하게 한다
+    initial_state: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    replay_of_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("simulation_runs.id", ondelete="SET NULL"),
+        index=True,
+    )
+    # 재생 run 만: 외기 시계열·수동 제어 일정·원본 기대 결과
+    replay_input: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     farm: Mapped[Farm] = relationship()
     room: Mapped[Room] = relationship()

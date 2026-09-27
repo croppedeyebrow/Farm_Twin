@@ -46,13 +46,39 @@ SPIKE_PERIOD_S = 60.0
 
 @dataclass(frozen=True)
 class ActiveFault:
-    """step 이 측정에 적용할 진행 중 고장 하나."""
+    """
+    step 이 측정에 적용할 고장 하나.
+
+    end_simulation_time 이 있으면 해제된 고장 — 그 시각의 샘플까지만 적용한다
+    (해제 시각 샘플은 해제 전에 측정된 것). 재생 run 이 과거 구간을 같은 시각에
+    다시 밟을 수 있도록 활성 플래그가 아니라 시각으로 판단한다.
+    """
 
     sensor_type: SensorType
     fault_type: FaultType
     start_simulation_time: float
     magnitude: float | None = None
     stuck_value: float | None = None
+    end_simulation_time: float | None = None
+
+    def covers(self, simulation_time: float) -> bool:
+        if simulation_time < self.start_simulation_time:
+            return False
+        return self.end_simulation_time is None or simulation_time <= self.end_simulation_time
+
+
+@dataclass(frozen=True)
+class FaultSchedule:
+    """run 의 고장 이력 — 스텝 시각마다 센서 타입별 적용 고장을 고른다."""
+
+    faults: tuple[ActiveFault, ...] = ()
+
+    def active_at(self, simulation_time: float) -> dict[SensorType, ActiveFault]:
+        chosen: dict[SensorType, ActiveFault] = {}
+        for fault in sorted(self.faults, key=lambda item: item.start_simulation_time):
+            if fault.covers(simulation_time):
+                chosen[fault.sensor_type] = fault
+        return chosen
 
 
 def spike_magnitude(fault: ActiveFault) -> float:
@@ -76,9 +102,9 @@ def apply_fault(
     """
     고장 적용 후 raw 값. None 이면 이번 샘플은 전송되지 않는다(dropout).
 
-    주입 시각 이전 샘플에는 적용하지 않는다.
+    주입 시각 이전·해제 시각 이후 샘플에는 적용하지 않는다.
     """
-    if fault is None or simulation_time < fault.start_simulation_time:
+    if fault is None or not fault.covers(simulation_time):
         return raw_value
     if fault.fault_type is FaultType.DROPOUT:
         return None

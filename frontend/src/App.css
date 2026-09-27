@@ -749,6 +749,84 @@
   margin: 0;
 }
 
+/* Day 23: 재현·lineage */
+.lineage-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.45rem 0.9rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.lineage-kv li {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.lineage-kv span,
+.lineage-chain span {
+  font-size: 0.66rem;
+  color: #7a8494;
+}
+
+.lineage-kv strong {
+  font-size: 0.8rem;
+  color: #e8ecf1;
+  overflow-wrap: anywhere;
+}
+
+.replay-compare {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #2a3344;
+  border-radius: 0.4rem;
+  background: #141c27;
+}
+
+.replay-compare > p {
+  margin: 0 0 0.55rem;
+  font-size: 0.76rem;
+  color: #c3cad5;
+}
+
+.replay-compare .lineage-kv {
+  margin-bottom: 0.35rem;
+}
+
+.lineage-chain {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: lineage;
+}
+
+.lineage-chain li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  column-gap: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  border-left: 2px solid #2f9e44;
+  background: #141c27;
+  border-radius: 0 0.35rem 0.35rem 0;
+}
+
+.lineage-chain strong {
+  font-size: 0.78rem;
+  color: #e8ecf1;
+}
+
+.lineage-chain em {
+  grid-column: 2;
+  font-size: 0.68rem;
+  font-style: normal;
+  color: #7a8494;
+  overflow-wrap: anywhere;
+}
+
 .ops-table td .ops-badge {
   margin-left: 0.35rem;
 }

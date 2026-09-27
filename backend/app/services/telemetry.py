@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -177,6 +178,8 @@ class ReadingWriter:
     session: AsyncSession
     run: SimulationRun
     next_sequence: int
+    # 마지막으로 추가한 reading 행 id — 규칙 명령의 판정 근거(trigger_reading_id)
+    last_reading_id: uuid.UUID | None = None
 
     def _issue_sequence(self) -> int:
         value = self.next_sequence
@@ -229,8 +232,10 @@ class ReadingWriter:
                 )
             )
 
+        self.last_reading_id = uuid.uuid4()
         self.session.add(
             SensorReading(
+                id=self.last_reading_id,
                 sensor_id=sensor.id,
                 farm_id=self.run.farm_id,
                 room_id=self.run.room_id,
@@ -258,12 +263,18 @@ async def open_stream(
     session: AsyncSession,
     run: SimulationRun,
     config: QualityConfig = DEFAULT_QUALITY_CONFIG,
+    *,
+    seed_states: Mapping[uuid.UUID, StreamState] | None = None,
 ) -> tuple[StreamQualityAssessor, ReadingWriter]:
-    """run 의 판정기·적재기를 DB 상태에서 이어 받는다."""
-    assessor = StreamQualityAssessor(
-        config=config,
-        states=await load_stream_states(session, run.id, config),
-    )
+    """
+    run 의 판정기·적재기를 DB 상태에서 이어 받는다.
+
+    seed_states: 이 run 에 아직 행이 없는 센서의 출발 상태 (재생 run 의 체크포인트).
+    DB 에 행이 생긴 센서는 DB 가 우선한다.
+    """
+    states = dict(seed_states or {})
+    states.update(await load_stream_states(session, run.id, config))
+    assessor = StreamQualityAssessor(config=config, states=states)
     writer = ReadingWriter(
         session=session,
         run=run,

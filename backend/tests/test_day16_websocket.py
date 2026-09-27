@@ -244,6 +244,8 @@ async def test_start_run_publishes_only_after_commit() -> None:
     run.simulation_time_seconds = 0.0
     run.time_scale = 1.0
     run.notes = None
+    run.rule_set_version = None
+    run.replay_of_run_id = None
 
     async def fake_publish(_out: object) -> int:
         order.append("publish")

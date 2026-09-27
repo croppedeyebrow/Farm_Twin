@@ -33,9 +33,11 @@ from app.schemas.farm import (
     SensorSummary,
 )
 from app.schemas.fault import FaultListOut
+from app.schemas.history import QualityReportOut, ReadingHistoryOut
 from app.schemas.telemetry import SensorHealthReport
 from app.services import farm as farm_service
 from app.services import faults as fault_service
+from app.services import history as history_service
 from app.services import telemetry as telemetry_service
 
 router = APIRouter(tags=["farms"])
@@ -94,6 +96,34 @@ async def get_sensor_health(
 async def list_farm_faults(farm_id: uuid.UUID, session: DbSession) -> FaultListOut:
     """최신 run 의 센서 고장 시작·해제 이력 (관제 UI)."""
     return await fault_service.list_farm_faults(session, farm_id)
+
+
+@router.get("/farms/{farm_id}/readings/history", response_model=ReadingHistoryOut)
+async def get_reading_history(
+    farm_id: uuid.UUID,
+    session: DbSession,
+    sensor_code: str | None = None,
+    bucket_seconds: int = Query(default=60),
+    start: float | None = None,
+    end: float | None = None,
+    limit: int = Query(default=240, ge=1, le=2000),
+) -> ReadingHistoryOut:
+    """최신 run 의 측정 이력 (0 원시 / 60 = 1분 / 300 = 5분 집계)."""
+    return await history_service.farm_reading_history(
+        session,
+        farm_id,
+        sensor_code=sensor_code,
+        bucket_seconds=bucket_seconds,
+        start=start,
+        end=end,
+        limit=limit,
+    )
+
+
+@router.get("/farms/{farm_id}/quality-report", response_model=QualityReportOut)
+async def get_quality_report(farm_id: uuid.UUID, session: DbSession) -> QualityReportOut:
+    """최신 run 의 데이터 품질 리포트."""
+    return await history_service.farm_quality_report(session, farm_id)
 
 
 @router.get("/farms/{farm_id}/actuators", response_model=list[ActuatorSummary])

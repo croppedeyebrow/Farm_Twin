@@ -45,7 +45,7 @@ from app.domain.simulation.state import EnvironmentState
 from app.domain.telemetry import QualityReason, StreamQualityAssessor
 from app.main import app
 from app.services.room_control import clear_blocked_cache
-from app.services.simulation import SENDER_SEQUENCES, SenderSequences
+from app.services.sender import SENDER_SEQUENCES, SenderSequences
 
 # ---------------------------------------------------------------------------
 # 고장 적용 (도메인)

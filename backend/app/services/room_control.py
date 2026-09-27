@@ -37,6 +37,7 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -121,9 +122,18 @@ def _db_key(key: str, simulation_time: float) -> str:
 async def _restore_runtime(
     session: AsyncSession,
     run_id: uuid.UUID,
+    seed_gates: Mapping[str, Any] | None = None,
 ) -> ControlRuntime:
-    """min_on / cooldown 게이트용 설비별 마지막 규칙 START/STOP 시각."""
+    """
+    min_on / cooldown 게이트용 설비별 마지막 규칙 START/STOP 시각.
+
+    seed_gates: 재생 run 의 체크포인트 게이트. 이 run 의 명령 이력이 뒤에 덮어쓴다.
+    """
     runtime = ControlRuntime()
+    for actuator_type, (last_start, last_stop) in (seed_gates or {}).items():
+        timing = runtime.timing_for(ActuatorType(actuator_type))
+        timing.last_start_sim_time = last_start
+        timing.last_stop_sim_time = last_stop
     rows = await session.execute(
         select(ControlCommand.desired_mode, ControlCommand.simulation_time, Actuator.actuator_type)
         .join(Actuator, ControlCommand.actuator_id == Actuator.id)
@@ -151,6 +161,7 @@ class RoomController:
     rules: list[tuple[ControlRule, RuleDefinition]]
     actuators: list[Actuator]
     runtime: ControlRuntime
+    rule_set_version: str
     quality_policy: QualityPolicy = DEFAULT_QUALITY_POLICY
     commands_issued: int = 0
     blocked_recorded: int = 0
@@ -169,9 +180,16 @@ class RoomController:
         *,
         simulation_time: float,
         now: datetime,
+        reading_ids: Mapping[SensorType, uuid.UUID] | None = None,
     ) -> bool:
-        """규칙 한 틱. 설비 상태가 바뀌었으면 True."""
+        """
+        규칙 한 틱. 설비 상태가 바뀌었으면 True.
+
+        reading_ids: 이번 스텝에 적재한 측정 행 — 명령의 판정 근거로 남긴다.
+        dropout 처럼 행이 없는 판정은 근거가 비어 있다.
+        """
         changed = False
+        reading_ids = reading_ids or {}
         by_type = self.actuators_by_type
         claimed: set[ActuatorType] = set()
 
@@ -207,6 +225,7 @@ class RoomController:
                         metric_value=decision.metric_value,
                         simulation_time=simulation_time,
                         now=now,
+                        trigger_reading_id=reading_ids.get(rule.metric),
                     )
                 continue
             _BLOCKED.pop(block_key, None)
@@ -245,6 +264,8 @@ class RoomController:
                 simulation_time=simulation_time,
                 issued_at=now,
                 reason=application.command.reason,
+                rule_version=rule.version,
+                trigger_reading_id=reading_ids.get(rule.metric),
             )
             self.session.add(command)
             self.session.add(
@@ -278,6 +299,7 @@ class RoomController:
         metric_value: float | None,
         simulation_time: float,
         now: datetime,
+        trigger_reading_id: uuid.UUID | None,
     ) -> None:
         """품질 차단 구간 시작 — 설비는 그대로 두고 감사 기록만 남긴다."""
         quality_text = quality.value if quality is not None else "unknown"
@@ -306,6 +328,8 @@ class RoomController:
             simulation_time=simulation_time,
             issued_at=now,
             reason=f"quality {action.value}: {quality_text}",
+            rule_version=rule.version,
+            trigger_reading_id=trigger_reading_id,
         )
         self.session.add(command)
         self.session.add(
@@ -322,10 +346,39 @@ class RoomController:
         self.blocked_recorded += 1
 
 
+async def control_checkpoint(session: AsyncSession, run_id: uuid.UUID) -> dict[str, Any]:
+    """
+    체크포인트용 제어 런타임 — 게이트 시각과 진행 중 품질 차단.
+
+    재생 run 이 원본의 중간 시각에서 출발해도 min_on/cooldown 과
+    "차단 구간 시작만 기록" 이 원본과 같게 동작하도록 함께 저장한다.
+    """
+    runtime = await _restore_runtime(session, run_id)
+    return {
+        "gates": {
+            actuator_type.value: [timing.last_start_sim_time, timing.last_stop_sim_time]
+            for actuator_type, timing in runtime.timing.items()
+        },
+        "blocked": {
+            rule_name: quality.value
+            for (blocked_run, rule_name), quality in _BLOCKED.items()
+            if blocked_run == run_id and quality is not None
+        },
+    }
+
+
+def seed_blocked(run_id: uuid.UUID, blocked: Mapping[str, str]) -> None:
+    """재생 run 첫 스텝 — 원본 체크포인트 시점에 진행 중이던 품질 차단."""
+    for rule_name, quality in blocked.items():
+        _BLOCKED[(run_id, rule_name)] = ReadingQuality(quality)
+
+
 async def open_room_controller(
     session: AsyncSession,
     run: SimulationRun,
     actuators: Iterable[Actuator],
+    *,
+    seed_gates: Mapping[str, Any] | None = None,
 ) -> RoomController:
     orm_rules = (
         await session.scalars(
@@ -336,12 +389,14 @@ async def open_room_controller(
         )
     ).all()
     definitions = {rule.id: rule_from_orm(rule) for rule in orm_rules}
-    ordered = RuleSet(rules=tuple(definitions.values())).enabled_by_priority()
+    rule_set = RuleSet(rules=tuple(definitions.values()))
+    ordered = rule_set.enabled_by_priority()
     by_name = {definitions[rule.id].name: rule for rule in orm_rules}
     return RoomController(
         session=session,
         run=run,
         rules=[(by_name[rule.name], rule) for rule in ordered],
         actuators=list(actuators),
-        runtime=await _restore_runtime(session, run.id),
+        runtime=await _restore_runtime(session, run.id, seed_gates),
+        rule_set_version=rule_set.fingerprint(),
     )
