@@ -70,6 +70,9 @@ class SimulationStepResult(BaseModel):
     simulation_time_seconds: float
     farm_state_version: int
     readings_inserted: int
+    # Day 22: 측정값 기반 룸 규칙이 낸 명령 수 / 품질 차단 기록 수
+    commands_issued: int = 0
+    control_blocked: int = 0
     temperature_c: float
     humidity_pct: float
     co2_ppm: float

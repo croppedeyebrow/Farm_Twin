@@ -4,6 +4,7 @@
 
 import { useMemo } from 'react'
 
+import { FaultInjectionPanel } from '../components/ops/FaultInjectionPanel'
 import { OpsPageChrome } from '../components/ops/OpsPageChrome'
 import { SensorQualityPanel } from '../components/ops/SensorQualityPanel'
 import {
@@ -230,6 +231,8 @@ export function SensorRecordsPage() {
       </section>
 
       <SensorQualityPanel />
+
+      <FaultInjectionPanel />
 
       <section className="ops-panel ops-table-panel" aria-label="측정 이력">
         <header className="ops-panel-head">

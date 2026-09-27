@@ -17,6 +17,10 @@
  * Day 21
  * -----------------------------------------------------------------------------
  * - sensorHealth: REST 센서 품질(good/suspect/bad/missing/stale) 주기 조회
+ *
+ * Day 22
+ * -----------------------------------------------------------------------------
+ * - faults: 최신 run 의 센서 고장 주입·해제 이력
  */
 
 import { create } from 'zustand'
@@ -30,6 +34,7 @@ import type {
   SensorHealthReport,
   SensorSummary,
 } from '../api/farms'
+import type { FaultList } from '../api/faults'
 import type { SocketStatus } from '../realtime/farmSocket'
 import {
   KPI_HISTORY_CAPACITY,
@@ -69,6 +74,7 @@ export type RealtimeStore = {
   lastError: string | null
   recovering: boolean
   sensorHealth: SensorHealthReport | null
+  faults: FaultList | null
 
   setFarmId: (farmId: string) => void
   setSocketStatus: (status: SocketStatus) => void
@@ -92,6 +98,7 @@ export type RealtimeStore = {
   setChartMetric: (metric: SensorMetricKey) => void
   pushTimeline: (entry: TimelineEntry) => void
   setSensorHealth: (report: SensorHealthReport | null) => void
+  setFaults: (faults: FaultList | null) => void
   /** 수동 제어 REST 응답 즉시 반영 (WS actuator.updated 를 기다리지 않음) */
   applyActuatorSummary: (actuator: ActuatorSummary) => void
 }
@@ -151,9 +158,11 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
   lastError: null,
   recovering: false,
   sensorHealth: null,
+  faults: null,
 
   setFarmId: (farmId) => set({ farmId }),
   setSensorHealth: (sensorHealth) => set({ sensorHealth }),
+  setFaults: (faults) => set({ faults }),
   applyActuatorSummary: (actuator) =>
     set((current) => ({
       actuators: current.actuators.map((item) =>

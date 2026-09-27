@@ -28,6 +28,10 @@ function valueText(item: SensorHealth): string {
 
 export function SensorQualityPanel() {
   const report = useRealtimeStore((s) => s.sensorHealth)
+  const faultList = useRealtimeStore((s) => s.faults)
+  const faultedIds = new Set(
+    (faultList?.faults ?? []).filter((f) => f.active).map((f) => f.sensor_id),
+  )
 
   if (!report) {
     return (
@@ -73,6 +77,9 @@ export function SensorQualityPanel() {
                   <td>
                     <strong>{item.name}</strong>
                     <em>{item.code}</em>
+                    {faultedIds.has(item.sensor_id) ? (
+                      <span className="ops-badge tone-alert">고장 주입</span>
+                    ) : null}
                   </td>
                   <td>
                     <span className={`ops-badge tone-${QUALITY_TONE[item.quality]}`}>

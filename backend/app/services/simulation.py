@@ -46,6 +46,8 @@ push 실패는 publisher 가 삼키므로 API 응답·DB 상태는 유지된다.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
@@ -53,6 +55,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Actuator, FarmState, Sensor, SimulationRun
+from app.domain.control.evaluate import MetricReading
 from app.domain.enums import (
     ActuatorMode,
     ReadingSource,
@@ -69,10 +72,14 @@ from app.domain.simulation.state import (
 )
 from app.domain.simulation.weather import create_weather_adapter
 from app.domain.telemetry import StreamQualityAssessor
+from app.schemas.farm import ActuatorSummary
 from app.schemas.simulation import SimulationRunOut, SimulationStepResult
+from app.services.faults import load_active_faults
+from app.services.room_control import missing_reading, open_room_controller
 from app.services.telemetry import ReadingWriter, open_stream
 from app.services.zone_runtime import advance_zones
 from app.websocket.publisher import (
+    publish_actuator_updated,
     publish_farm_state_updated,
     publish_simulation_status,
 )
@@ -198,7 +205,7 @@ async def stop_run(session: AsyncSession, run_id: uuid.UUID) -> SimulationRunOut
     return out
 
 
-def _environment_from_farm_state(state: FarmState) -> EnvironmentState:
+def environment_from_farm_state(state: FarmState) -> EnvironmentState:
     """DB 참값 스냅샷 → 도메인 EnvironmentState (ORM 의존을 step 밖으로)."""
     return EnvironmentState(
         temperature_c=state.temperature_c,
@@ -232,19 +239,13 @@ def _apply_environment_to_farm_state(
     farm_state.version = farm_state.version + 1
 
 
-async def _load_actuator_inputs(
-    session: AsyncSession,
-    room_id: uuid.UUID,
-) -> ActuatorInputs:
+def actuator_inputs_from(actuators: Iterable[Actuator]) -> ActuatorInputs:
     """
     ORM Actuator 현재 운전 캐시 → 상태전이 입력 벡터.
 
     OFF 이면 effective 0.
     동일 타입 여러 대는 max (Day 9 ActuatorInputs.from_commands 와 동일 정책).
     """
-    actuators = (
-        await session.scalars(select(Actuator).where(Actuator.room_id == room_id))
-    ).all()
     ratios = {
         "hvac": 0.0,
         "heater": 0.0,
@@ -285,27 +286,92 @@ async def _load_actuator_inputs(
     return ActuatorInputs(**ratios)
 
 
+@dataclass
+class _SenderCursor:
+    issued: int
+    # 발급 시점에 수신측이 마지막으로 받은 번호 — DB 와 어긋나면 커서를 버린다
+    received: int | None
+
+
+class SenderSequences:
+    """
+    시뮬 송신측 센서별 source_sequence.
+
+    dropout 중에도 번호는 진행하지만 저장되는 행이 없어 DB 만으로는 복원할 수 없다.
+    그래서 프로세스 메모리에 커서를 두고, 수신측 상태(DB 복원)가 커서를 만든
+    시점과 같을 때만 이어 쓴다. 재시작·재시드로 어긋나면 수신측 기준으로 돌아간다
+    (그 경우 복구 시 누락 마커가 생기지 않을 뿐 stale 판정은 유지된다).
+    """
+
+    def __init__(self) -> None:
+        self._cursors: dict[tuple[uuid.UUID, uuid.UUID], _SenderCursor] = {}
+
+    def clear(self) -> None:
+        self._cursors.clear()
+
+    def issue(
+        self,
+        run_id: uuid.UUID,
+        sensor_id: uuid.UUID,
+        assessor: StreamQualityAssessor,
+    ) -> int:
+        received = assessor.state_for(sensor_id).last_sequence
+        cursor = self._cursors.get((run_id, sensor_id))
+        sequence = assessor.next_sequence(sensor_id)
+        if cursor is not None and cursor.received == received:
+            sequence = max(sequence, cursor.issued + 1)
+        self._cursors[(run_id, sensor_id)] = _SenderCursor(issued=sequence, received=received)
+        return sequence
+
+    def delivered(self, run_id: uuid.UUID, sensor_id: uuid.UUID, sequence: int) -> None:
+        self._cursors[(run_id, sensor_id)] = _SenderCursor(issued=sequence, received=sequence)
+
+
+SENDER_SEQUENCES = SenderSequences()
+
+
+@dataclass(frozen=True)
+class PersistResult:
+    inserted: int
+    readings: dict[SensorType, MetricReading]
+
+
 def persist_samples(
     *,
+    run_id: uuid.UUID,
     assessor: StreamQualityAssessor,
     writer: ReadingWriter,
     sensors_by_type: dict[SensorType, Sensor],
     samples: list[SensorSample],
+    dropped_types: Iterable[SensorType] = (),
     sampled_at: datetime,
     ingested_at: datetime,
-) -> int:
+) -> PersistResult:
     """
     가상 센서 샘플을 스트림 품질 판정 후 append-only 로 추가한다.
 
-    시뮬은 송신측이라 센서별 source_sequence 를 판정기 상태에서 이어 발급한다.
+    시뮬은 송신측이라 센서별 source_sequence 를 SENDER_SEQUENCES 로 발급한다.
+    dropped_types(dropout) 는 번호만 소비하고 저장하지 않는다.
     룸에 해당 sensor_type 메타가 없으면 그 샘플은 skip.
+
+    readings 는 규칙 입력 — 판정된 값·품질, dropout 은 MISSING.
     """
     inserted = 0
+    readings: dict[SensorType, MetricReading] = {}
+    for sensor_type in dropped_types:
+        sensor = sensors_by_type.get(sensor_type)
+        if sensor is None:
+            continue
+        SENDER_SEQUENCES.issue(run_id, sensor.id, assessor)
+        readings[sensor_type] = missing_reading(
+            sensor_type, assessor.state_for(sensor.id).last_value
+        )
+
     for sample in samples:
         sensor = sensors_by_type.get(sample.sensor_type)
         if sensor is None:
             continue
-        source_sequence = assessor.next_sequence(sensor.id)
+        source_sequence = SENDER_SEQUENCES.issue(run_id, sensor.id, assessor)
         assessment = assessor.assess(
             sensor.id,
             sensor_type=sample.sensor_type,
@@ -314,9 +380,17 @@ def persist_samples(
             simulation_time=sample.simulation_time,
             base_quality=sample.quality,
             base_reason=sample.quality_reason,
+            raw_value=sample.raw_value,
             sampled_at=sampled_at,
             ingested_at=ingested_at,
         )
+        if assessment.verdict is not None:
+            SENDER_SEQUENCES.delivered(run_id, sensor.id, source_sequence)
+            readings[sample.sensor_type] = MetricReading(
+                sensor_type=sample.sensor_type,
+                value=sample.value,
+                quality=assessment.verdict.quality,
+            )
         inserted += writer.add(
             sensor=sensor,
             assessment=assessment,
@@ -331,7 +405,7 @@ def persist_samples(
             ingested_at=ingested_at,
             telemetry_schema_version=sample.telemetry_schema_version,
         )
-    return inserted
+    return PersistResult(inserted=inserted, readings=readings)
 
 
 async def step_run(
@@ -350,7 +424,10 @@ async def step_run(
     1) weather.read(t+dt) — 외기 경계조건
     2) step_environment — 참값 오일러 적분
     3) FarmState / run.simulation_time_seconds 갱신 (noise 없음)
-    4) (옵션) VirtualSensorBank.measure → readings batch
+    4) (옵션) VirtualSensorBank.measure(활성 고장 적용) → 품질 판정·readings batch
+    5) (옵션) 측정값·품질로 룸 규칙 평가 → Command/Event, 설비 갱신 (Day 22)
+
+    persist_readings=False 면 측정이 없으므로 규칙도 돌리지 않는다.
 
     재시작 복구
     -----------
@@ -386,9 +463,14 @@ async def step_run(
     params = load_environment_params()
     weather = create_weather_adapter(run.weather_mode.value, seed=run.random_seed)
     sensor_bank = VirtualSensorBank(seed=run.random_seed)
-    actuators = await _load_actuator_inputs(session, run.room_id)
+    room_actuators = (
+        await session.scalars(select(Actuator).where(Actuator.room_id == run.room_id))
+    ).all()
+    actuators = actuator_inputs_from(room_actuators)
+    faults = await load_active_faults(session, run.id)
+    controller = await open_room_controller(session, run, room_actuators)
 
-    env = _environment_from_farm_state(farm_state)
+    env = environment_from_farm_state(farm_state)
     # 커밋된 run 시계를 도메인 상태의 권위 있는 시각으로 사용
     env = EnvironmentState(
         temperature_c=env.temperature_c,
@@ -433,18 +515,36 @@ async def step_run(
             dt_seconds=dt_seconds,
         )
 
-        # ② 측정은 참값 env 를 읽기만 한다
+        # ② 측정은 참값 env 를 읽기만 한다 (Day 22: 활성 고장은 측정에만 적용)
         if persist_readings:
-            samples = sensor_bank.measure(env, source=ReadingSource.SIMULATED)
+            samples = sensor_bank.measure(
+                env, source=ReadingSource.SIMULATED, faults=faults
+            )
+            sampled_types = {sample.sensor_type for sample in samples}
             now = datetime.now(UTC)
-            readings_inserted += persist_samples(
+            persisted = persist_samples(
+                run_id=run.id,
                 assessor=assessor,
                 writer=writer,
                 sensors_by_type=sensors_by_type,
                 samples=samples,
+                dropped_types=[
+                    sensor_type
+                    for sensor_type in faults
+                    if sensor_type not in sampled_types
+                ],
                 sampled_at=now,
                 ingested_at=now,
             )
+            readings_inserted += persisted.inserted
+
+            # ③ 측정값·품질로 룸 규칙 → 설비 변경은 다음 스텝 입력에 반영
+            if controller.evaluate(
+                persisted.readings,
+                simulation_time=env.simulation_time,
+                now=now,
+            ):
+                actuators = actuator_inputs_from(room_actuators)
 
     await session.commit()
     await session.refresh(farm_state)
@@ -457,6 +557,8 @@ async def step_run(
         simulation_time_seconds=run.simulation_time_seconds,
         farm_state_version=farm_state.version,
         readings_inserted=readings_inserted,
+        commands_issued=controller.commands_issued,
+        control_blocked=controller.blocked_recorded,
         # 응답의 환경 필드는 항상 FarmState 참값 (readings 가 아님)
         temperature_c=farm_state.temperature_c,
         humidity_pct=farm_state.humidity_pct,
@@ -471,4 +573,13 @@ async def step_run(
         room_id=run.room_id,
         result=result,
     )
+    for actuator in room_actuators:
+        if actuator.id in controller.changed_actuator_ids:
+            await publish_actuator_updated(
+                farm_id=run.farm_id,
+                room_id=run.room_id,
+                actuator_payload=ActuatorSummary.model_validate(actuator).model_dump(
+                    mode="json"
+                ),
+            )
     return result

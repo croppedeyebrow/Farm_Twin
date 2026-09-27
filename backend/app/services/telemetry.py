@@ -71,15 +71,59 @@ async def next_run_sequence(session: AsyncSession, run_id: uuid.UUID) -> int:
     return int(current) + 1
 
 
+async def _load_flat_runs(
+    session: AsyncSession,
+    run_id: uuid.UUID,
+    window: int,
+) -> dict[uuid.UUID, tuple[float, int]]:
+    """센서별 (최신 raw, 최신부터 같은 raw 연속 횟수). 최근 window 행만 본다."""
+    row_number = (
+        func.row_number()
+        .over(
+            partition_by=SensorReading.sensor_id,
+            order_by=SensorReading.sequence.desc(),
+        )
+        .label("rn")
+    )
+    recent = (
+        select(SensorReading.sensor_id, SensorReading.raw_value, row_number)
+        .where(
+            SensorReading.simulation_run_id == run_id,
+            SensorReading.raw_value.is_not(None),
+        )
+        .subquery()
+    )
+    rows = await session.execute(
+        select(recent.c.sensor_id, recent.c.raw_value)
+        .where(recent.c.rn <= window)
+        .order_by(recent.c.sensor_id, recent.c.rn)
+    )
+    runs: dict[uuid.UUID, tuple[float, int]] = {}
+    broken: set[uuid.UUID] = set()
+    for sensor_id, raw in rows.all():
+        if sensor_id in broken:
+            continue
+        current = runs.get(sensor_id)
+        if current is None:
+            runs[sensor_id] = (raw, 1)
+        elif raw == current[0]:
+            runs[sensor_id] = (current[0], current[1] + 1)
+        else:
+            broken.add(sensor_id)
+    return runs
+
+
 async def load_stream_states(
     session: AsyncSession,
     run_id: uuid.UUID,
+    config: QualityConfig = DEFAULT_QUALITY_CONFIG,
 ) -> dict[uuid.UUID, StreamState]:
     """
     센서별 수신측 기준 상태를 DB 에서 복원한다.
 
     - last_sequence: 누락 마커 포함 최대 source_sequence
     - last_value / last_simulation_time: BAD·누락이 아닌 최신 행
+    - last_raw / flat_run: 최근 원시값 연속 (stuck 검출용)
     """
     max_rows = await session.execute(
         select(SensorReading.sensor_id, func.max(SensorReading.source_sequence))
@@ -101,14 +145,18 @@ async def load_stream_states(
         )
     ).all()
     baseline_by_sensor = {row.sensor_id: row for row in baselines}
+    flat_runs = await _load_flat_runs(session, run_id, config.flatline_samples)
 
     states: dict[uuid.UUID, StreamState] = {}
     for sensor_id in set(last_sequences) | set(baseline_by_sensor):
         baseline = baseline_by_sensor.get(sensor_id)
+        last_raw, flat_run = flat_runs.get(sensor_id, (None, 0))
         states[sensor_id] = StreamState(
             last_sequence=last_sequences.get(sensor_id),
             last_value=baseline.value if baseline else None,
             last_simulation_time=baseline.simulation_time if baseline else None,
+            last_raw=last_raw,
+            flat_run=flat_run,
         )
     return states
 
@@ -214,7 +262,7 @@ async def open_stream(
     """run 의 판정기·적재기를 DB 상태에서 이어 받는다."""
     assessor = StreamQualityAssessor(
         config=config,
-        states=await load_stream_states(session, run.id),
+        states=await load_stream_states(session, run.id, config),
     )
     writer = ReadingWriter(
         session=session,
@@ -305,6 +353,7 @@ async def ingest_readings(
             simulation_time=normalized.simulation_time,
             base_quality=normalized.quality,
             base_reason=normalized.quality_reason,
+            raw_value=normalized.raw_value,
             sampled_at=sampled_at,
             ingested_at=now,
         )
@@ -356,7 +405,7 @@ async def ingest_readings(
 # ---------------------------------------------------------------------------
 
 
-async def _latest_run_for_farm(
+async def latest_run_for_farm(
     session: AsyncSession,
     farm_id: uuid.UUID,
 ) -> SimulationRun | None:
@@ -393,7 +442,7 @@ async def get_sensor_health(
             select(Sensor).where(Sensor.room_id == room.id).order_by(Sensor.code)
         )
     ).all()
-    run = await _latest_run_for_farm(session, farm_id)
+    run = await latest_run_for_farm(session, farm_id)
     now = datetime.now(UTC)
 
     latest_by_sensor: dict[uuid.UUID, SensorReading] = {}

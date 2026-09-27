@@ -14,6 +14,8 @@
  *
  * Day 21: 센서 품질(health)은 WS 이벤트가 없어 REST 주기 조회한다.
  * stale 은 "새 값이 안 오는 것"이라 이벤트 기반으로는 감지할 수 없다.
+ *
+ * Day 22: 고장 이력과 제어 이벤트(품질 차단 기록 포함)도 같은 주기로 갱신한다.
  */
 
 import {
@@ -21,6 +23,7 @@ import {
   fetchFarmSnapshot,
   fetchSensorHealth,
 } from '../api/farms'
+import { fetchFarmFaults } from '../api/faults'
 import { FarmRealtimeSocket, type SocketStatus } from './farmSocket'
 import type { EventEnvelope } from './envelope'
 import {
@@ -38,17 +41,22 @@ let healthInFlight = false
 
 const HEALTH_POLL_MS = 5000
 
-async function reloadSensorHealth(): Promise<void> {
+/** 센서 품질·고장 이력·제어 이벤트 재조회. 고장 주입/해제 직후에도 호출한다. */
+export async function reloadSensorPanels(): Promise<void> {
   const farmId = activeFarmId
   if (!farmId || healthInFlight) return
   healthInFlight = true
   try {
-    const report = await fetchSensorHealth(farmId)
-    if (farmId === activeFarmId) {
-      useRealtimeStore.getState().setSensorHealth(report)
-    }
-  } catch {
-    // 품질 패널은 보조 — 실패해도 세션을 깨지 않는다
+    const [health, faults] = await Promise.allSettled([
+      fetchSensorHealth(farmId),
+      fetchFarmFaults(farmId),
+    ])
+    if (farmId !== activeFarmId) return
+    const store = useRealtimeStore.getState()
+    // 품질·고장 패널은 보조 — 실패해도 세션을 깨지 않는다
+    if (health.status === 'fulfilled') store.setSensorHealth(health.value)
+    if (faults.status === 'fulfilled') store.setFaults(faults.value)
+    await reloadControlEvents()
   } finally {
     healthInFlight = false
   }
@@ -73,8 +81,7 @@ async function reloadSnapshot(reason: string): Promise<void> {
   try {
     const snapshot = await fetchFarmSnapshot(activeFarmId)
     useRealtimeStore.getState().applySnapshot(snapshot)
-    await reloadControlEvents()
-    void reloadSensorHealth()
+    void reloadSensorPanels()
   } catch (error) {
     const message =
       error instanceof Error ? error.message : `snapshot failed (${reason})`
@@ -147,9 +154,10 @@ export async function startFarmRealtimeSession(farmId: string): Promise<void> {
   activeFarmId = farmId
   useRealtimeStore.getState().setFarmId(farmId)
   useRealtimeStore.getState().setSensorHealth(null)
+  useRealtimeStore.getState().setFaults(null)
 
   await reloadSnapshot('boot')
-  healthTimer = setInterval(() => void reloadSensorHealth(), HEALTH_POLL_MS)
+  healthTimer = setInterval(() => void reloadSensorPanels(), HEALTH_POLL_MS)
 
   socket = new FarmRealtimeSocket({
     onStatus: handleStatus,

@@ -49,9 +49,11 @@ from __future__ import annotations
 
 import random
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from app.domain.enums import ReadingQuality, ReadingSource, SensorType, Unit
+from app.domain.simulation.faults import ActiveFault, apply_fault
 from app.domain.simulation.state import EnvironmentState
 from app.domain.telemetry import (
     TELEMETRY_READING_SCHEMA_VERSION,
@@ -160,6 +162,7 @@ class VirtualSensorBank:
         state: EnvironmentState,
         *,
         source: ReadingSource = ReadingSource.SIMULATED,
+        faults: Mapping[SensorType, ActiveFault] | None = None,
     ) -> list[SensorSample]:
         """
         현재 참값 state 로부터 전 채널 측정 샘플을 만든다.
@@ -169,7 +172,8 @@ class VirtualSensorBank:
         1. true_now 를 버퍼에 append
         2. delay_steps 만큼 과거 참값 선택 (버퍼가 짧으면 가장 오래된 값)
         3. offset + 결정적 가우시안 noise → raw_value
-        4. telemetry 파이프라인 (단위 정규화 + 범위 quality)
+        4. (Day 22) 고장 적용 — dropout 채널은 샘플을 만들지 않는다
+        5. telemetry 파이프라인 (단위 정규화 + 범위 quality)
         """
         samples: list[SensorSample] = []
         for channel in self.channels:
@@ -195,7 +199,13 @@ class VirtualSensorBank:
             else:
                 noise = 0.0
 
-            raw = delayed_true + channel.offset + noise
+            raw = apply_fault(
+                delayed_true + channel.offset + noise,
+                (faults or {}).get(channel.sensor_type),
+                simulation_time=state.simulation_time,
+            )
+            if raw is None:
+                continue
             input_unit = default_unit_for(channel.sensor_type)
             normalized = process_telemetry_reading(
                 TelemetryReadingIn(

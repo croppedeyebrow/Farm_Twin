@@ -19,6 +19,7 @@ Day 21 은 **같은 센서 스트림의 직전 상태**를 함께 봐야 알 수
 | sequence 역순   | 거부 (저장 안 함)           | sequence_out_of_order         |
 | sequence 누락   | 빈 번호마다 MISSING 마커 행 | sequence_gap                  |
 | 시간 역전       | BAD                         | time_reversed                 |
+| 원시값 고정     | BAD                         | flatline_detected (Day 22)    |
 | 변화율 초과     | SUSPECT                     | rate_of_change_exceeded       |
 | 적재 지연 초과  | SUSPECT                     | ingest_latency_exceeded       |
 | 범위 밖 (Day20) | SUSPECT                     | out_of_range_clamped_low/high |
@@ -58,6 +59,7 @@ class QualityReason(StrEnum):
     SEQUENCE_DUPLICATE = "sequence_duplicate"
     SEQUENCE_OUT_OF_ORDER = "sequence_out_of_order"
     TIME_REVERSED = "time_reversed"
+    FLATLINE = "flatline_detected"
     RATE_OF_CHANGE = "rate_of_change_exceeded"
     INGEST_LATENCY = "ingest_latency_exceeded"
     NO_READINGS = "no_readings"
@@ -139,12 +141,26 @@ DEFAULT_RATE_LIMITS: dict[SensorType, RateLimit] = {
     SensorType.NUTRIENT_PH: RateLimit(per_second=0.01, deadband=0.2),
 }
 
+# 아날로그 잡음이 항상 있는 센서만 원시값 고정(stuck)을 본다.
+# PPFD 는 야간에 실측 0 이 반복되는 게 정상이라 제외한다.
+DEFAULT_FLATLINE_SENSOR_TYPES: frozenset[SensorType] = frozenset(
+    {
+        SensorType.TEMPERATURE,
+        SensorType.HUMIDITY,
+        SensorType.CO2,
+        SensorType.SUBSTRATE_MOISTURE,
+    }
+)
+
 
 @dataclass(frozen=True)
 class QualityConfig:
     rate_limits: Mapping[SensorType, RateLimit] = field(
         default_factory=lambda: dict(DEFAULT_RATE_LIMITS)
     )
+    flatline_sensor_types: frozenset[SensorType] = DEFAULT_FLATLINE_SENSOR_TYPES
+    # 같은 raw 가 이 개수만큼 연속되면 BAD
+    flatline_samples: int = 4
     max_ingest_latency_s: float = 30.0
     expected_period_s: float = 60.0
     stale_after_periods: float = 3.0
@@ -199,12 +215,22 @@ class StreamState:
     센서 스트림 하나의 수신측 기준 상태.
 
     last_value / last_simulation_time 은 마지막 **사용 가능한** 값이다.
-    BAD(시간 역전) 행은 기준으로 삼지 않는다.
+    BAD(시간 역전·고정) 행은 기준으로 삼지 않는다.
+    last_raw / flat_run 은 BAD 여부와 무관하게 직전 원시값과 그 연속 횟수다.
     """
 
     last_sequence: int | None = None
     last_value: float | None = None
     last_simulation_time: float | None = None
+    last_raw: float | None = None
+    flat_run: int = 0
+
+
+def flatline_run(state: StreamState, raw_value: float) -> int:
+    """이번 raw 를 포함한 같은 원시값 연속 횟수."""
+    if state.last_raw is not None and raw_value == state.last_raw:
+        return state.flat_run + 1
+    return 1
 
 
 def classify_stream_reading(
@@ -215,6 +241,7 @@ def classify_stream_reading(
     base_quality: ReadingQuality,
     base_reason: str | None,
     state: StreamState,
+    raw_value: float | None = None,
     sampled_at: datetime | None = None,
     ingested_at: datetime | None = None,
     config: QualityConfig = DEFAULT_QUALITY_CONFIG,
@@ -227,6 +254,14 @@ def classify_stream_reading(
     """
     quality = base_quality
     reasons: list[str] = [base_reason] if base_reason else []
+
+    if (
+        raw_value is not None
+        and sensor_type in config.flatline_sensor_types
+        and flatline_run(state, raw_value) >= config.flatline_samples
+    ):
+        quality = worse_quality(quality, ReadingQuality.BAD)
+        reasons.append(QualityReason.FLATLINE.value)
 
     last_t = state.last_simulation_time
     if last_t is not None and simulation_time < last_t:
@@ -325,7 +360,7 @@ class StreamQualityAssessor:
         return self._states.get(key, StreamState())
 
     def next_sequence(self, key: Hashable) -> int:
-        """송신측(시뮬)이 다음에 쓸 sequence."""
+        """수신측이 마지막으로 받은 sequence 다음 번호."""
         last = self.state_for(key).last_sequence
         return 0 if last is None else last + 1
 
@@ -339,6 +374,7 @@ class StreamQualityAssessor:
         simulation_time: float,
         base_quality: ReadingQuality = ReadingQuality.GOOD,
         base_reason: str | None = None,
+        raw_value: float | None = None,
         sampled_at: datetime | None = None,
         ingested_at: datetime | None = None,
     ) -> StreamAssessment:
@@ -376,6 +412,7 @@ class StreamQualityAssessor:
             base_quality=base_quality,
             base_reason=base_reason,
             state=state,
+            raw_value=raw_value,
             sampled_at=sampled_at,
             ingested_at=ingested_at,
             config=self.config,
@@ -391,6 +428,10 @@ class StreamQualityAssessor:
             last_sequence=source_sequence,
             last_value=value if usable else state.last_value,
             last_simulation_time=simulation_time if usable else state.last_simulation_time,
+            last_raw=raw_value if raw_value is not None else state.last_raw,
+            flat_run=(
+                flatline_run(state, raw_value) if raw_value is not None else state.flat_run
+            ),
         )
         return StreamAssessment(
             sequence=seq,

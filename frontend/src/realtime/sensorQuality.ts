@@ -38,6 +38,7 @@ const REASON_LABEL: Record<string, string> = {
   sequence_duplicate: 'sequence 중복',
   sequence_out_of_order: 'sequence 역순',
   time_reversed: '측정 시각 역전',
+  flatline_detected: '값 고정(stuck) 의심',
   rate_of_change_exceeded: '변화율 초과',
   ingest_latency_exceeded: '수집 지연 초과',
   no_readings: '미수집',

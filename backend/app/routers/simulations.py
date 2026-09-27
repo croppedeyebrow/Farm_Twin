@@ -27,12 +27,19 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.schemas.fault import (
+    FaultClearRequest,
+    FaultInjectRequest,
+    FaultListOut,
+    FaultOut,
+)
 from app.schemas.simulation import (
     SimulationRunOut,
     SimulationStepRequest,
     SimulationStepResult,
 )
 from app.schemas.telemetry import TelemetryIngestRequest, TelemetryIngestResult
+from app.services import faults as fault_service
 from app.services import simulation as simulation_service
 from app.services import telemetry as telemetry_service
 
@@ -116,3 +123,35 @@ async def ingest_readings(
     건너뛴 sequence 는 quality=missing 마커로 남긴다.
     """
     return await telemetry_service.ingest_readings(session, run_id, body)
+
+
+@router.post("/simulations/{run_id}/faults", response_model=FaultOut, status_code=201)
+async def inject_fault(
+    run_id: uuid.UUID,
+    body: FaultInjectRequest,
+    session: DbSession,
+) -> FaultOut:
+    """
+    센서 고장 주입 (spike / stuck / dropout).
+
+    시작 시각은 run 의 현재 가상 시각. 다음 step 측정부터 적용된다.
+    센서당 진행 중 고장은 하나 — 겹치면 409.
+    """
+    return await fault_service.inject_fault(session, run_id, body)
+
+
+@router.post("/simulations/{run_id}/faults/{fault_id}/clear", response_model=FaultOut)
+async def clear_fault(
+    run_id: uuid.UUID,
+    fault_id: uuid.UUID,
+    session: DbSession,
+    body: FaultClearRequest | None = None,
+) -> FaultOut:
+    """고장 해제. end_simulation_time·cleared_at 을 기록하고 다음 step 부터 정상 측정."""
+    return await fault_service.clear_fault(session, run_id, fault_id, body)
+
+
+@router.get("/simulations/{run_id}/faults", response_model=FaultListOut)
+async def list_faults(run_id: uuid.UUID, session: DbSession) -> FaultListOut:
+    """run 의 고장 시작·해제 이력 (최신순)."""
+    return await fault_service.list_run_faults(session, run_id)

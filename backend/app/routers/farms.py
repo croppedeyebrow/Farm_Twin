@@ -32,8 +32,10 @@ from app.schemas.farm import (
     SensorReadingOut,
     SensorSummary,
 )
+from app.schemas.fault import FaultListOut
 from app.schemas.telemetry import SensorHealthReport
 from app.services import farm as farm_service
+from app.services import faults as fault_service
 from app.services import telemetry as telemetry_service
 
 router = APIRouter(tags=["farms"])
@@ -86,6 +88,12 @@ async def get_sensor_health(
         farm_id,
         recent_window=recent_window,
     )
+
+
+@router.get("/farms/{farm_id}/faults", response_model=FaultListOut)
+async def list_farm_faults(farm_id: uuid.UUID, session: DbSession) -> FaultListOut:
+    """최신 run 의 센서 고장 시작·해제 이력 (관제 UI)."""
+    return await fault_service.list_farm_faults(session, farm_id)
 
 
 @router.get("/farms/{farm_id}/actuators", response_model=list[ActuatorSummary])

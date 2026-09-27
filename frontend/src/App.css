@@ -714,6 +714,45 @@
   margin-bottom: 0.75rem;
 }
 
+.fault-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem;
+  margin-bottom: 0.6rem;
+}
+
+.fault-form label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  color: #7a8494;
+}
+
+.fault-form select,
+.fault-form input {
+  font: inherit;
+  font-size: 0.82rem;
+  color: #e8ecf1;
+  background: #1a2330;
+  border: 1px solid #2a3344;
+  border-radius: 0.35rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.fault-form input {
+  width: 7rem;
+}
+
+.fault-form .control-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.ops-table td .ops-badge {
+  margin-left: 0.35rem;
+}
+
 .ops-table-wrap {
   overflow: auto;
   max-height: 28rem;
