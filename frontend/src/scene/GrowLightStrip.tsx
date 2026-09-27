@@ -5,43 +5,78 @@
  */
 
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
-import type { Group, Mesh, MeshStandardMaterial } from 'three'
+import { useLayoutEffect, useMemo, useRef } from 'react'
+import { Matrix4 } from 'three'
+import type { Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three'
 
 type GrowLightStripProps = {
   length: number
   ledRatio: number
   width?: number
+  /** 발광 워시 평면까지의 아래 거리 (다단 랙은 캐노피 바로 위로 짧게) */
+  washDrop?: number
 }
 
 const DIODE_COLORS = ['#f8f9fa', '#4dabf7', '#e64980', '#f8f9fa', '#4dabf7'] as const
+
+function DiodeInstances({
+  color,
+  positions,
+}: {
+  color: string
+  positions: Array<[number, number, number]>
+}) {
+  const ref = useRef<InstancedMesh>(null)
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const m = new Matrix4()
+    positions.forEach(([x, y, z], i) => {
+      mesh.setMatrixAt(i, m.makeTranslation(x, y, z))
+    })
+    mesh.instanceMatrix.needsUpdate = true
+  }, [positions])
+
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, positions.length]}>
+      <boxGeometry args={[0.04, 0.012, 0.07]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={0}
+        roughness={0.3}
+      />
+    </instancedMesh>
+  )
+}
 
 export function GrowLightStrip({
   length,
   ledRatio,
   width = 0.26,
+  washDrop = 0.55,
 }: GrowLightStripProps) {
   const glowRef = useRef(0)
   const diodeGroupRef = useRef<Group>(null)
   const washRef = useRef<Mesh>(null)
   const statusRef = useRef<Mesh>(null)
 
-  const diodes = useMemo(() => {
-    const items: Array<{ z: number; color: string; lane: number }> = []
+  const diodesByColor = useMemo(() => {
+    const byColor = new Map<string, Array<[number, number, number]>>()
     const pitch = 0.11
     const half = (length * 0.82) / 2
     let i = 0
     for (let z = -half; z <= half + 1e-6; z += pitch) {
       for (let lane = 0; lane < 3; lane += 1) {
-        items.push({
-          z,
-          lane,
-          color: DIODE_COLORS[(i + lane) % DIODE_COLORS.length],
-        })
+        const color = DIODE_COLORS[(i + lane) % DIODE_COLORS.length]
+        const list = byColor.get(color) ?? []
+        list.push([(lane - 1) * 0.055, -0.055, z])
+        byColor.set(color, list)
       }
       i += 1
     }
-    return items
+    return [...byColor.entries()]
   }, [length])
 
   useFrame((_, delta) => {
@@ -50,13 +85,10 @@ export function GrowLightStrip({
     const on = g > 0.02
 
     if (diodeGroupRef.current) {
-      diodeGroupRef.current.traverse((obj) => {
-        const mesh = obj as Mesh
-        if (!mesh.isMesh) return
-        const mat = mesh.material as MeshStandardMaterial
-        if (!mat?.emissive) return
-        mat.emissiveIntensity = on ? 0.08 + g * 2.1 : 0
-      })
+      for (const obj of diodeGroupRef.current.children) {
+        const mat = (obj as Mesh).material as MeshStandardMaterial
+        if (mat?.emissive) mat.emissiveIntensity = on ? 0.08 + g * 2.1 : 0
+      }
     }
 
     if (washRef.current) {
@@ -86,20 +118,13 @@ export function GrowLightStrip({
       </mesh>
 
       <group ref={diodeGroupRef}>
-        {diodes.map((d, idx) => {
-          const x = (d.lane - 1) * 0.055
-          return (
-            <mesh key={`d-${idx}`} position={[x, -0.055, d.z]}>
-              <boxGeometry args={[0.04, 0.012, 0.07]} />
-              <meshStandardMaterial
-                color={d.color}
-                emissive={d.color}
-                emissiveIntensity={0}
-                roughness={0.3}
-              />
-            </mesh>
-          )
-        })}
+        {diodesByColor.map(([color, positions]) => (
+          <DiodeInstances
+            key={`${color}-${positions.length}`}
+            color={color}
+            positions={positions}
+          />
+        ))}
       </group>
 
       <mesh ref={statusRef} position={[0, 0.045, length * 0.4]}>
@@ -113,7 +138,7 @@ export function GrowLightStrip({
 
       <mesh
         ref={washRef}
-        position={[0, -0.55, 0]}
+        position={[0, -washDrop, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
         visible={false}
       >

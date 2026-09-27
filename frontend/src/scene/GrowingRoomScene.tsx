@@ -5,8 +5,8 @@
  * 구성 (레퍼런스 반영)
  * -----------------------------------------------------------------------------
  * - GreenhouseShell: 멀티스팬 아치 외피·골조·기초·천장 그리드
- * - GrapeCorridor ×2: 좌측·중앙 포도 (아치 수관·송이 봉지·흑멀칭·점적)
- * - StrawberryRack ×4: 중앙~우측 딸기 (벽 안쪽)
+ * - GrapeCorridor ×2: 좌측·중앙 포도 폴리터널 (비닐 아치·수직 트렐리스·우드칩 통로)
+ * - StrawberryRack ×4: 중앙~우측 딸기 3단 재배대 (단별 거터·LED)
  * - SensorMarkers / ActuatorVisuals
  *
  * 레퍼런스: docs/refs/greenhouse-exterior.jpg, strawberry-interior.png,
@@ -49,7 +49,7 @@ export function GrowingRoomScene() {
   return (
     <Canvas
       // 딸기 통로 시점 (내부 레퍼런스와 비슷한 소실점)
-      camera={{ position: [0.15, 1.55, 6.8], fov: 42 }}
+      camera={{ position: [0.9, 1.5, 6.6], fov: 42 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true }}
       onPointerMissed={() => {
@@ -66,7 +66,7 @@ export function GrowingRoomScene() {
         ? STRAWBERRY_ROW_X.map((x, i) => (
             <pointLight
               key={`led-light-${i}`}
-              position={[x, 2.35, 0]}
+              position={[x, 1.55, 0]}
               intensity={led * 0.95}
               color="#ff9ecd"
               distance={6.5}
@@ -77,7 +77,7 @@ export function GrowingRoomScene() {
         ? STRAWBERRY_ROW_X.map((x, i) => (
             <pointLight
               key={`led-light-w-${i}`}
-              position={[x, 2.2, 1.2]}
+              position={[x, 0.9, 1.2]}
               intensity={led * 0.55}
               color="#e7f5ff"
               distance={5}
@@ -135,7 +135,7 @@ export function GrowingRoomScene() {
 
       <OrbitControls
         makeDefault
-        target={[0.4, 1.1, -1.5]}
+        target={[0.9, 1.05, -1.5]}
         minPolarAngle={0.25}
         maxPolarAngle={1.45}
         minDistance={3.5}

@@ -1,309 +1,391 @@
-/**
- * 포도 터널 — 아치 수관 + grape.glb 송이 고밀도 배치.
- *
- * 목적: 레퍼런스 터널 구조는 유지하되, 송이는 crop-c021(=grape.glb)로 표현.
- * 이유: 흰 봉지 primitive 대신 실제 포도 메시가 관제·작물 식별에 맞음.
- * 에셋: public/models/grape.glb (== docs/refs/crop-c021.glb)
- */
-
-import { Suspense, useMemo } from 'react'
-import { DoubleSide } from 'three'
-
-import { useCropTuneStore } from '../store/cropTuneStore'
-import { GrapePlantModel } from './CropModel'
-
-const ARCH_COUNT = 9
-const ARCH_SPACING = 0.82
-const AISLE_HALF = 0.5
-const POST_X = 1.2
-const ARCH_PEAK_Y = 2.48
-const CORDON_Y = 1.32
-
-function archPoint(t: number): { x: number; y: number } {
-  const x = -POST_X + 2 * POST_X * t
-  const y = CORDON_Y + (ARCH_PEAK_Y - CORDON_Y) * Math.sin(Math.PI * t)
-  return { x, y }
-}
-
-function ArchFrame({ z }: { z: number }) {
-  const segments = useMemo(() => {
-    const items: Array<{
-      pos: [number, number, number]
-      rot: [number, number, number]
-      len: number
-    }> = []
-    const steps = 12
-    for (let i = 0; i < steps; i += 1) {
-      const t0 = i / steps
-      const t1 = (i + 1) / steps
-      const p0 = archPoint(t0)
-      const p1 = archPoint(t1)
-      const mx = (p0.x + p1.x) / 2
-      const my = (p0.y + p1.y) / 2
-      const dx = p1.x - p0.x
-      const dy = p1.y - p0.y
-      items.push({
-        pos: [mx, my, 0],
-        rot: [0, 0, Math.atan2(dy, dx)],
-        len: Math.hypot(dx, dy),
-      })
-    }
-    return items
-  }, [])
-
-  return (
-    <group position={[0, 0, z]}>
-      {([-POST_X, POST_X] as const).map((x) => (
-        <mesh key={`post-${x}`} position={[x, CORDON_Y / 2, 0]} castShadow>
-          <cylinderGeometry args={[0.022, 0.028, CORDON_Y, 6]} />
-          <meshStandardMaterial color="#9aa0a6" metalness={0.4} roughness={0.42} />
-        </mesh>
-      ))}
-      {segments.map((s, i) => (
-        <mesh key={`arc-${i}`} position={s.pos} rotation={s.rot}>
-          <cylinderGeometry args={[0.01, 0.01, s.len, 5]} />
-          <meshStandardMaterial color="#b0b6bc" metalness={0.3} roughness={0.48} />
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
-function VineTrunk({ x, z }: { x: number; z: number }) {
-  const side = x < 0 ? -1 : 1
-  return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, 0.68, 0]} castShadow>
-        <cylinderGeometry args={[0.035, 0.05, 1.36, 7]} />
-        <meshStandardMaterial color="#5c4033" roughness={0.93} />
-      </mesh>
-      <mesh
-        position={[-side * 0.28, 1.28, 0]}
-        rotation={[0.15, 0, side * 0.55]}
-      >
-        <cylinderGeometry args={[0.016, 0.024, 0.85, 6]} />
-        <meshStandardMaterial color="#6b5344" roughness={0.9} />
-      </mesh>
-    </group>
-  )
-}
-
-function CanopyLeaf({
-  position,
-  rotation,
-  w,
-  h,
-  shade,
-}: {
-  position: [number, number, number]
-  rotation: [number, number, number]
-  w: number
-  h: number
-  shade: number
-}) {
-  const r = Math.round(28 + shade * 18)
-  const g = Math.round(100 + shade * 70)
-  const b = Math.round(36 + shade * 12)
-  return (
-    <mesh position={position} rotation={rotation}>
-      <planeGeometry args={[w, h]} />
-      <meshStandardMaterial
-        color={`rgb(${r},${g},${b})`}
-        side={DoubleSide}
-        roughness={0.88}
-      />
-    </mesh>
-  )
-}
-
-function DripLine({ x, length = 7.0 }: { x: number; length?: number }) {
-  return (
-    <mesh
-      position={[x, 0.035, -length / 2 + 0.2]}
-      rotation={[Math.PI / 2, 0, 0]}
-    >
-      <cylinderGeometry args={[0.016, 0.016, length, 6]} />
-      <meshStandardMaterial color="#1a1b1e" roughness={0.78} />
-    </mesh>
-  )
-}
-
-function FruitWire({ x, y, length }: { x: number; y: number; length: number }) {
-  return (
-    <mesh
-      position={[x, y, -length / 2 + 0.15]}
-      rotation={[Math.PI / 2, 0, 0]}
-    >
-      <cylinderGeometry args={[0.004, 0.004, length, 4]} />
-      <meshStandardMaterial color="#ced4da" metalness={0.55} roughness={0.35} />
-    </mesh>
-  )
-}
-
-export function GrapeCorridor() {
-  const crop = useCropTuneStore((s) => s.grape)
-  const tunnelLen = (ARCH_COUNT - 1) * ARCH_SPACING + 0.4
-
-  const vines = useMemo(() => {
-    const items: Array<{ x: number; z: number }> = []
-    for (let i = 0; i < ARCH_COUNT; i += 1) {
-      const z = -i * ARCH_SPACING
-      items.push({ x: -POST_X + 0.06, z })
-      items.push({ x: POST_X - 0.06, z })
-    }
-    return items
-  }, [])
-
-  const canopyLeaves = useMemo(() => {
-    const items: Array<{
-      pos: [number, number, number]
-      rot: [number, number, number]
-      w: number
-      h: number
-      shade: number
-    }> = []
-    for (let i = 0; i < ARCH_COUNT; i += 1) {
-      const z0 = -i * ARCH_SPACING
-      for (let row = 0; row < 3; row += 1) {
-        const z = z0 + (row - 1) * 0.22
-        for (let t = 0.05; t <= 0.95; t += 0.055) {
-          const { x, y } = archPoint(t)
-          const tangent = Math.cos(Math.PI * t)
-          items.push({
-            pos: [
-              x * 0.98,
-              y + 0.06 + (Math.abs(t - 0.5) < 0.12 ? 0.04 : 0),
-              z + (t - 0.5) * 0.05,
-            ],
-            rot: [
-              Math.PI / 2.15 - Math.abs(tangent) * 0.25,
-              t * 3.1 + row,
-              -tangent * 0.75,
-            ],
-            w: 0.38 + (row % 2) * 0.06,
-            h: 0.28 + ((i + row) % 3) * 0.04,
-            shade: 0.15 + Math.abs(t - 0.5) * 0.9,
-          })
-        }
-      }
-    }
-    return items
-  }, [])
-
-  /**
-   * grape.glb 송이 — 예전 봉지 자리에 조밀 배치.
-   * 모델 로컬: Y≈0~0.25 (밑→위). 와이어에 매달리도록 위치·회전.
-   */
-  const grapeBunches = useMemo(() => {
-    const items: Array<{
-      position: [number, number, number]
-      rotation: [number, number, number]
-      scale: number
-    }> = []
-    const zStep = 0.3
-    const zStart = 0.12
-    const zEnd = -tunnelLen + 0.45
-    const leftTs = [0.2, 0.28, 0.35]
-    const rightTs = [0.65, 0.72, 0.8]
-
-    for (let z = zStart; z >= zEnd; z -= zStep) {
-      for (const t of leftTs) {
-        const { x, y } = archPoint(t)
-        const jitter = ((Math.abs(z * 10 + t * 17) % 7) - 3) * 0.01
-        const yaw = 0.4 + (Math.abs(z * 5) % 5) * 0.15
-        items.push({
-          // 송이 상단이 와이어 쪽에 오도록 Y를 약간 내림
-          position: [x + 0.02, y - 0.2 + jitter * 0.4, z + jitter],
-          rotation: [0.25, yaw, 0.12],
-          scale: 1.05 + (Math.abs(z * 3) % 5) * 0.04,
-        })
-      }
-      for (const t of rightTs) {
-        const { x, y } = archPoint(t)
-        const jitter = ((Math.abs(z * 11 + t * 13) % 7) - 3) * 0.01
-        const yaw = -0.4 - (Math.abs(z * 4) % 5) * 0.15
-        items.push({
-          position: [x - 0.02, y - 0.2 + jitter * 0.4, z + jitter],
-          rotation: [0.25, yaw, -0.12],
-          scale: 1.05 + (Math.abs(z * 5) % 5) * 0.04,
-        })
-      }
-    }
-    return items
-  }, [tunnelLen])
-
-  return (
-    <group position={[0, 0, 0.5]}>
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.01, -tunnelLen / 2]}
-        receiveShadow
-      >
-        <planeGeometry args={[AISLE_HALF * 2.15, tunnelLen + 0.6]} />
-        <meshStandardMaterial color="#f1f3f5" roughness={0.5} metalness={0.05} />
-      </mesh>
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[-(AISLE_HALF + 0.72), 0.016, -tunnelLen / 2]}
-        receiveShadow
-      >
-        <planeGeometry args={[1.35, tunnelLen + 0.6]} />
-        <meshStandardMaterial color="#141516" roughness={0.96} />
-      </mesh>
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[AISLE_HALF + 0.72, 0.016, -tunnelLen / 2]}
-        receiveShadow
-      >
-        <planeGeometry args={[1.35, tunnelLen + 0.6]} />
-        <meshStandardMaterial color="#141516" roughness={0.96} />
-      </mesh>
-
-      <DripLine x={-POST_X + 0.12} length={tunnelLen} />
-      <DripLine x={POST_X - 0.12} length={tunnelLen} />
-
-      <FruitWire x={-0.78} y={1.58} length={tunnelLen} />
-      <FruitWire x={-0.62} y={1.72} length={tunnelLen} />
-      <FruitWire x={0.62} y={1.72} length={tunnelLen} />
-      <FruitWire x={0.78} y={1.58} length={tunnelLen} />
-      <FruitWire x={-0.35} y={2.2} length={tunnelLen} />
-      <FruitWire x={0.35} y={2.2} length={tunnelLen} />
-      <FruitWire x={0} y={2.42} length={tunnelLen} />
-
-      {Array.from({ length: ARCH_COUNT }, (_, i) => (
-        <ArchFrame key={`arch-${i}`} z={-i * ARCH_SPACING} />
-      ))}
-
-      {vines.map((v) => (
-        <VineTrunk key={`trunk-${v.x}-${v.z}`} x={v.x} z={v.z} />
-      ))}
-
-      {canopyLeaves.map((leaf, index) => (
-        <CanopyLeaf
-          key={`leaf-${index}`}
-          position={leaf.pos}
-          rotation={leaf.rot}
-          w={leaf.w}
-          h={leaf.h}
-          shade={leaf.shade}
-        />
-      ))}
-
-      <Suspense fallback={null}>
-        {grapeBunches.map((bunch, index) => (
-          <GrapePlantModel
-            key={`bunch-${index}`}
-            position={[
-              bunch.position[0] + crop.offsetX,
-              bunch.position[1] + crop.offsetY,
-              bunch.position[2] + crop.offsetZ,
-            ]}
-            rotation={bunch.rotation}
-            scale={bunch.scale * crop.scale}
-          />
-        ))}
-      </Suspense>
-    </group>
-  )
-}
-
+/**
+ * 포도 폴리터널.
+ *
+ * 레퍼런스: 포도 재배 구역 — 반투명 비닐 아치 터널, 능선·측면 도리,
+ * 양옆 수직 트렐리스(지주+수평선+유인줄)에 올린 포도 생울타리, 가운데 우드칩 통로,
+ * 안쪽 끝 출입문. 송이는 grape.glb 를 통로 쪽 과실 높이에 매단다.
+ */
+
+import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
+import {
+  BufferGeometry,
+  CatmullRomCurve3,
+  Color,
+  DoubleSide,
+  Float32BufferAttribute,
+  Object3D,
+  Path,
+  Shape,
+  Vector3,
+} from 'three'
+import type { InstancedMesh } from 'three'
+
+import { useCropTuneStore } from '../store/cropTuneStore'
+import { GrapePlantModel } from './CropModel'
+import { GRAPE_TUNNEL_HALF_WIDTH } from './rackLayout'
+
+const HOOP_COUNT = 9
+const HOOP_SPACING = 0.82
+const TUNNEL_LEN = (HOOP_COUNT - 1) * HOOP_SPACING
+const HALF_W = GRAPE_TUNNEL_HALF_WIDTH
+const PEAK_Y = 2.45
+/** 1 보다 작을수록 옆벽이 서고 지붕이 평평해진다 (폴리터널 단면) */
+const PROFILE_EXP = 0.72
+const ROW_X = 0.62
+const TRELLIS_TOP = 1.85
+const WIRE_YS = [0.45, 0.9, 1.35, TRELLIS_TOP] as const
+const PROFILE_STEPS = 28
+
+const FILM = '#eef2f5'
+const STEEL = '#aab1b8'
+
+function profilePoint(t: number): { x: number; y: number } {
+  const theta = Math.PI * (1 - t)
+  const c = Math.cos(theta)
+  const s = Math.sin(theta)
+  return {
+    x: HALF_W * Math.sign(c) * Math.abs(c) ** PROFILE_EXP,
+    y: PEAK_Y * Math.max(0, s) ** PROFILE_EXP,
+  }
+}
+
+function profilePoints(): Array<{ x: number; y: number }> {
+  return Array.from({ length: PROFILE_STEPS + 1 }, (_, i) =>
+    profilePoint(i / PROFILE_STEPS),
+  )
+}
+
+function seeded(seed: number): () => number {
+  let s = seed >>> 0
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0
+    return s / 4294967296
+  }
+}
+
+/** 단면을 Z 로 쓸어 만든 비닐 외피 */
+function useFilmGeometry(): BufferGeometry {
+  return useMemo(() => {
+    const pts = profilePoints()
+    const positions: number[] = []
+    const indices: number[] = []
+    const zFront = 0.12
+    const zBack = -TUNNEL_LEN - 0.04
+    pts.forEach(({ x, y }) => {
+      positions.push(x, y, zFront, x, y, zBack)
+    })
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const a = i * 2
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+    }
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    geo.setIndex(indices)
+    geo.computeVertexNormals()
+    return geo
+  }, [])
+}
+
+/** 안쪽 끝 막음 비닐 (출입문 개구 포함) */
+function useEndWallShape(): Shape {
+  return useMemo(() => {
+    const pts = profilePoints()
+    const shape = new Shape()
+    shape.moveTo(pts[0].x, 0)
+    pts.forEach(({ x, y }) => shape.lineTo(x, y))
+    shape.lineTo(pts[pts.length - 1].x, 0)
+    shape.closePath()
+    const door = new Path()
+    door.moveTo(-0.4, 0)
+    door.lineTo(-0.4, 1.9)
+    door.lineTo(0.4, 1.9)
+    door.lineTo(0.4, 0)
+    door.closePath()
+    shape.holes.push(door)
+    return shape
+  }, [])
+}
+
+function useHoopCurve(): CatmullRomCurve3 {
+  return useMemo(
+    () =>
+      new CatmullRomCurve3(profilePoints().map(({ x, y }) => new Vector3(x, y, 0))),
+    [],
+  )
+}
+
+type LeafItem = {
+  position: [number, number, number]
+  rotation: [number, number, number]
+  scale: number
+  color: string
+}
+
+function InstancedLeaves({ items }: { items: LeafItem[] }) {
+  const ref = useRef<InstancedMesh>(null)
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const dummy = new Object3D()
+    const color = new Color()
+    items.forEach((leaf, i) => {
+      dummy.position.set(...leaf.position)
+      dummy.rotation.set(...leaf.rotation)
+      dummy.scale.setScalar(leaf.scale)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+      mesh.setColorAt(i, color.set(leaf.color))
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [items])
+
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]}>
+      <circleGeometry args={[0.5, 7]} />
+      <meshStandardMaterial side={DoubleSide} roughness={0.85} />
+    </instancedMesh>
+  )
+}
+
+function WoodChips({ count, width }: { count: number; width: number }) {
+  const ref = useRef<InstancedMesh>(null)
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const rnd = seeded(71)
+    const dummy = new Object3D()
+    const color = new Color()
+    for (let i = 0; i < count; i += 1) {
+      dummy.position.set((rnd() - 0.5) * width, 0.022, 0.1 - rnd() * (TUNNEL_LEN + 0.2))
+      dummy.rotation.set(0, rnd() * Math.PI, 0)
+      dummy.scale.set(0.05 + rnd() * 0.05, 1, 0.02 + rnd() * 0.02)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+      mesh.setColorAt(i, color.setHSL(0.08 + rnd() * 0.03, 0.4, 0.3 + rnd() * 0.22))
+    }
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [count, width])
+
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, count]}>
+      <boxGeometry args={[1, 0.012, 1]} />
+      <meshStandardMaterial roughness={0.95} />
+    </instancedMesh>
+  )
+}
+
+function AlongZ({
+  x,
+  y,
+  radius,
+  color,
+  length = TUNNEL_LEN,
+}: {
+  x: number
+  y: number
+  radius: number
+  color: string
+  length?: number
+}) {
+  return (
+    <mesh position={[x, y, -length / 2]} rotation={[Math.PI / 2, 0, 0]}>
+      <cylinderGeometry args={[radius, radius, length, 6]} />
+      <meshStandardMaterial color={color} metalness={0.4} roughness={0.45} />
+    </mesh>
+  )
+}
+
+export function GrapeCorridor() {
+  const crop = useCropTuneStore((s) => s.grape)
+  const film = useFilmGeometry()
+  const endWall = useEndWallShape()
+  const hoopCurve = useHoopCurve()
+
+  const vineZs = useMemo(
+    () => Array.from({ length: HOOP_COUNT }, (_, i) => -i * HOOP_SPACING),
+    [],
+  )
+  const trellisPostZs = useMemo(
+    () => vineZs.filter((_, i) => i % 2 === 0 || i === HOOP_COUNT - 1),
+    [vineZs],
+  )
+
+  const leaves = useMemo(() => {
+    const rnd = seeded(29)
+    const items: LeafItem[] = []
+    for (const side of [-1, 1] as const) {
+      const rowX = side * ROW_X
+      for (let z = 0.05; z >= -TUNNEL_LEN - 0.05; z -= 0.09) {
+        const perSlice = 7
+        for (let k = 0; k < perSlice; k += 1) {
+          const h = 0.3 + (1 - rnd() ** 1.6) * (TRELLIS_TOP + 0.12 - 0.3)
+          const shade = rnd()
+          items.push({
+            position: [rowX + (rnd() - 0.5) * 0.34, h, z + (rnd() - 0.5) * 0.08],
+            rotation: [
+              (rnd() - 0.6) * 0.9,
+              (side < 0 ? Math.PI / 2 : -Math.PI / 2) + (rnd() - 0.5) * 1.1,
+              (rnd() - 0.5) * 0.8,
+            ],
+            scale: 0.15 + rnd() * 0.09,
+            color: new Color()
+              .setHSL(0.26 + shade * 0.04, 0.55 + shade * 0.2, 0.12 + shade * 0.12)
+              .getStyle(),
+          })
+        }
+      }
+    }
+    return items
+  }, [])
+
+  const bunches = useMemo(() => {
+    const rnd = seeded(113)
+    const items: Array<{
+      position: [number, number, number]
+      rotation: [number, number, number]
+      scale: number
+    }> = []
+    for (const side of [-1, 1] as const) {
+      const faceX = side * ROW_X - side * 0.16
+      for (const vz of vineZs) {
+        for (const dz of [-0.24, 0.02, 0.26]) {
+          const scale = 1.0 + rnd() * 0.3
+          const hangY = 1.05 + rnd() * 0.35
+          items.push({
+            position: [faceX + (rnd() - 0.5) * 0.06, hangY - 0.25 * scale, vz + dz],
+            rotation: [0, rnd() * Math.PI * 2, side * 0.08],
+            scale,
+          })
+        }
+      }
+    }
+    return items
+  }, [vineZs])
+
+  return (
+    <group position={[0, 0, 0.5]}>
+      {/* 바닥: 가장자리 흙 + 재배열 + 가운데 우드칩 통로 */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, -TUNNEL_LEN / 2]} receiveShadow>
+        <planeGeometry args={[HALF_W * 2, TUNNEL_LEN + 0.3]} />
+        <meshStandardMaterial color="#6f5d47" roughness={0.97} />
+      </mesh>
+      {([-ROW_X, ROW_X] as const).map((x) => (
+        <mesh
+          key={`bed-${x}`}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[x, 0.012, -TUNNEL_LEN / 2]}
+          receiveShadow
+        >
+          <planeGeometry args={[0.34, TUNNEL_LEN + 0.2]} />
+          <meshStandardMaterial color="#4e3d2e" roughness={0.98} />
+        </mesh>
+      ))}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.016, -TUNNEL_LEN / 2]} receiveShadow>
+        <planeGeometry args={[(ROW_X - 0.2) * 2, TUNNEL_LEN + 0.3]} />
+        <meshStandardMaterial color="#a07c55" roughness={0.98} />
+      </mesh>
+      <WoodChips count={360} width={(ROW_X - 0.22) * 2} />
+
+      {/* 아치 파이프 + 도리 */}
+      {vineZs.map((z) => (
+        <mesh key={`hoop-${z}`} position={[0, 0, z]}>
+          <tubeGeometry args={[hoopCurve, 36, 0.014, 5, false]} />
+          <meshStandardMaterial color={STEEL} metalness={0.45} roughness={0.4} />
+        </mesh>
+      ))}
+      <AlongZ x={0} y={PEAK_Y} radius={0.013} color={STEEL} />
+      {[0.22, 0.78].map((t) => {
+        const p = profilePoint(t)
+        return <AlongZ key={`purlin-${t}`} x={p.x} y={p.y} radius={0.011} color={STEEL} />
+      })}
+      {[-1, 1].map((side) => (
+        <AlongZ key={`base-${side}`} x={side * (HALF_W - 0.01)} y={0.12} radius={0.02} color="#8d8f91" />
+      ))}
+
+      {/* 반투명 비닐 */}
+      <mesh geometry={film} renderOrder={2}>
+        <meshStandardMaterial
+          color={FILM}
+          transparent
+          opacity={0.2}
+          roughness={0.35}
+          side={DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh position={[0, 0, -TUNNEL_LEN - 0.04]} renderOrder={2}>
+        <shapeGeometry args={[endWall, 24]} />
+        <meshStandardMaterial
+          color={FILM}
+          transparent
+          opacity={0.32}
+          side={DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {([-0.4, 0.4] as const).map((x) => (
+        <mesh key={`door-${x}`} position={[x, 0.95, -TUNNEL_LEN - 0.02]}>
+          <boxGeometry args={[0.04, 1.9, 0.04]} />
+          <meshStandardMaterial color="#8a9096" metalness={0.3} />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.9, -TUNNEL_LEN - 0.02]}>
+        <boxGeometry args={[0.84, 0.04, 0.04]} />
+        <meshStandardMaterial color="#8a9096" metalness={0.3} />
+      </mesh>
+
+      {/* 트렐리스: 지주 + 수평선 */}
+      {([-ROW_X, ROW_X] as const).map((x) => (
+        <group key={`trellis-${x}`}>
+          {trellisPostZs.map((z) => (
+            <mesh key={`tp-${z}`} position={[x, TRELLIS_TOP / 2 + 0.05, z]}>
+              <boxGeometry args={[0.04, TRELLIS_TOP + 0.1, 0.04]} />
+              <meshStandardMaterial color="#8c7355" roughness={0.9} />
+            </mesh>
+          ))}
+          {WIRE_YS.map((y) => (
+            <AlongZ key={`w-${y}`} x={x} y={y} radius={0.0035} color="#dee2e6" />
+          ))}
+          <AlongZ x={x + (x < 0 ? 0.1 : -0.1)} y={0.04} radius={0.014} color="#1a1b1e" />
+        </group>
+      ))}
+
+      {/* 포도나무 원줄기 + 유인줄 */}
+      {vineZs.flatMap((z) =>
+        ([-ROW_X, ROW_X] as const).map((x) => (
+          <group key={`vine-${x}-${z}`} position={[x, 0, z]}>
+            <mesh position={[0, 0.5, 0]} rotation={[0.06, 0, x < 0 ? 0.05 : -0.05]} castShadow>
+              <cylinderGeometry args={[0.022, 0.034, 1.0, 6]} />
+              <meshStandardMaterial color="#5c4033" roughness={0.93} />
+            </mesh>
+            <mesh position={[0, (TRELLIS_TOP + 0.1) / 2, 0.02]}>
+              <cylinderGeometry args={[0.003, 0.003, TRELLIS_TOP - 0.1, 3]} />
+              <meshStandardMaterial color="#f1f3f5" />
+            </mesh>
+          </group>
+        )),
+      )}
+
+      <InstancedLeaves items={leaves} />
+
+      <Suspense fallback={null}>
+        {bunches.map((bunch, index) => (
+          <GrapePlantModel
+            key={`bunch-${index}`}
+            position={[
+              bunch.position[0] + crop.offsetX,
+              bunch.position[1] + crop.offsetY,
+              bunch.position[2] + crop.offsetZ,
+            ]}
+            rotation={bunch.rotation}
+            scale={bunch.scale * crop.scale}
+          />
+        ))}
+      </Suspense>
+    </group>
+  )
+}

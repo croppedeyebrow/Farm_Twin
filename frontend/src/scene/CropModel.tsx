@@ -2,12 +2,14 @@
  * GLB 작물 에셋 로더.
  *
  * 딸기 세트: 원본 형태 유지 + Roots 숨김 + 열매 메시를 복제해
- * 한 가지(트러스)당 매달린 양이 풍성해 보이게 한다.
+ * 한 가지(트러스)당 매달린 양이 풍성해 보이게 한 뒤 재질별로 병합해 캐시한다.
  */
 
 import { Clone, useGLTF } from '@react-three/drei'
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import type { BufferGeometry, Group, Mesh, Object3D } from 'three'
+import { Group, Mesh as MeshObject } from 'three'
+import type { BufferGeometry, Material, Mesh, Object3D } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 export const STRAWBERRY_SET_URL = '/models/strawberry-set.glb'
 export const GRAPE_MODEL_URL = '/models/grape.glb'
@@ -75,8 +77,53 @@ function densifyFruitClusters(root: Object3D) {
   }
 }
 
+/**
+ * 보이는 메시를 재질별로 병합한다 — 다단 랙에서 세그먼트가 100개 가까이
+ * 반복되므로 세그먼트당 draw call 을 ~200 → 재질 수로 줄인다.
+ */
+function mergeByMaterial(root: Object3D): Group {
+  root.updateMatrixWorld(true)
+  const buckets = new Map<string, { material: Material; geometries: BufferGeometry[] }>()
+
+  root.traverse((obj) => {
+    const mesh = obj as Mesh
+    if (!mesh.isMesh || !mesh.visible || Array.isArray(mesh.material)) return
+    const geometry = (mesh.geometry as BufferGeometry).clone()
+    geometry.applyMatrix4(mesh.matrixWorld)
+    const material = mesh.material
+    const bucket = buckets.get(material.uuid) ?? { material, geometries: [] }
+    bucket.geometries.push(geometry.index ? geometry.toNonIndexed() : geometry)
+    buckets.set(material.uuid, bucket)
+  })
+
+  const merged = new Group()
+  for (const { material, geometries } of buckets.values()) {
+    const common = Object.keys(geometries[0].attributes).filter((name) =>
+      geometries.every((g) => g.getAttribute(name) !== undefined),
+    )
+    for (const g of geometries) {
+      for (const name of Object.keys(g.attributes)) {
+        if (!common.includes(name)) g.deleteAttribute(name)
+      }
+      g.morphAttributes = {}
+    }
+    const combined = mergeGeometries(geometries, false)
+    if (combined) {
+      merged.add(new MeshObject(combined, material))
+    } else {
+      for (const g of geometries) merged.add(new MeshObject(g, material))
+    }
+  }
+  return merged
+}
+
+const preparedRows = new WeakMap<Object3D, Object3D>()
+
 function prepareStrawberryRow(source: Object3D): Object3D {
+  const cached = preparedRows.get(source)
+  if (cached) return cached
   const root = source.clone(true)
+  root.removeFromParent()
   root.traverse((obj) => {
     const mesh = obj as Mesh
     if (!mesh.isMesh) return
@@ -85,7 +132,9 @@ function prepareStrawberryRow(source: Object3D): Object3D {
     }
   })
   densifyFruitClusters(root)
-  return root
+  const merged = mergeByMaterial(root)
+  preparedRows.set(source, merged)
+  return merged
 }
 
 export function CropModel({

@@ -290,7 +290,7 @@ function PpfdMeter({
   const x = STRAWBERRY_ROW_X[1]
   return (
     <group
-      position={[x, GUTTER_HEIGHT + 0.55, 0.8]}
+      position={[x + 0.24, GUTTER_HEIGHT + 0.3, 0.8]}
       onClick={(e) => {
         e.stopPropagation()
         onSelect()
